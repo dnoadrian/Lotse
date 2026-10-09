@@ -236,12 +236,11 @@ function GmailCard({ config }: { config: AppConfig | null }) {
       <div className="perm-box">
         <span className="strong">Angefragte Berechtigungen</span>
         <div className="perm-row">
-          <span className="mono small tone-link">gmail.readonly</span>
-          <span className="muted small">Absender, Betreff und Datum für die Erkennung lesen</span>
-        </div>
-        <div className="perm-row">
           <span className="mono small tone-link">gmail.modify</span>
-          <span className="muted small">Nachrichten in den Papierkorb verschieben (nur auf deine Anweisung)</span>
+          <span className="muted small">
+            Absender, Betreff und Datum für die Erkennung lesen und Nachrichten in den Papierkorb verschieben (nur auf
+            deine Anweisung). Kein Vollzugriff.
+          </span>
         </div>
       </div>
       {enabled ? (
@@ -604,7 +603,7 @@ export function ConnectionsPage() {
             <div className="scan-card-head">
               <div className="stack-4">
                 <h2 id="scan-h">Konten-Scan</h2>
-                <span className="muted">Lotse liest nur Kopfzeilen und kurze Ausschnitte, um Registrierungen zu erkennen.</span>
+                <span className="muted">Lotse liest nur Absender, Betreff und Datum, um Registrierungen zu erkennen – keine Inhalte, keine Anhänge.</span>
               </div>
               <div className="row-wrap align-end">
                 <label className="field-compact">

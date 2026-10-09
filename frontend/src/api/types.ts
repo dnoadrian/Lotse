@@ -59,12 +59,11 @@ export interface AuditEntry {
 }
 
 export interface AppConfig {
-  gmail_enabled: boolean;
   imap_allowed_ports: number[];
   jdm: { entries: number; commit?: string; date?: string; source?: string };
 }
 
-export type Provider = "imap" | "gmail";
+export type Provider = "imap";
 
 export interface Account {
   id: number;
@@ -163,7 +162,7 @@ export interface MessageList {
   page: number;
   page_size: number;
   uidvalidity: string;
-  next_cursor: string | null;
+  next_cursor?: string | null;
 }
 
 export type DeleteMode = "selected" | "all" | "registration";

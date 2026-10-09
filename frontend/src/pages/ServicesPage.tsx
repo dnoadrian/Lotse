@@ -323,7 +323,7 @@ export function ServicesPage() {
         )}
         {accountList.map((a) => (
           <span key={a.id}>
-            {a.label} · {a.provider === "gmail" ? "Gmail · API" : "IMAP"}
+            {a.label} · IMAP
             {a.status === "error" ? <span className="text-red"> (Fehler)</span> : null}
           </span>
         ))}
@@ -340,7 +340,7 @@ export function ServicesPage() {
         <div className="empty-card">
           <h2>Noch kein Postfach verbunden</h2>
           <p className="muted">
-            Verbinde dein Mailcow-Postfach (IMAP) oder Gmail. Quitly liest Kopfzeilen und den Anfang jeder Mail und erkennt daraus, bei welchen
+            Verbinde dein Mailcow-Postfach (IMAP). Quitly liest Kopfzeilen und den Anfang jeder Mail und erkennt daraus, bei welchen
             Diensten du ein Konto hast.
           </p>
           <Link className="btn btn-primary" to="/verbindungen">

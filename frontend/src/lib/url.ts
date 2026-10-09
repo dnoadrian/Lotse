@@ -1,4 +1,4 @@
-// URL-Prüfungen für Links aus Serverdaten (JustDeleteMe, OAuth).
+// URL-Prüfungen für Links aus Serverdaten (JustDeleteMe).
 
 /** Nur http(s)-Links werden als Link dargestellt. */
 export function isSafeHttpUrl(url: string | null | undefined): url is string {
@@ -8,17 +8,6 @@ export function isSafeHttpUrl(url: string | null | undefined): url is string {
   try {
     const u = new URL(trimmed);
     return (u.protocol === "https:" || u.protocol === "http:") && !!u.hostname;
-  } catch {
-    return false;
-  }
-}
-
-/** Google-OAuth-Ziel muss exakt https://accounts.google.com/… sein. */
-export function isGoogleAuthUrl(url: string | null | undefined): url is string {
-  if (!url || !url.startsWith("https://accounts.google.com/")) return false;
-  try {
-    const u = new URL(url);
-    return u.protocol === "https:" && u.hostname === "accounts.google.com" && u.port === "";
   } catch {
     return false;
   }

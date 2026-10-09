@@ -124,13 +124,12 @@ export function folderDisplayName(folder: Pick<Folder, "name" | "special">): str
 // ---------------------------------------------------------------- Postfächer
 
 export function providerLabel(provider: string): string {
-  if (provider === "gmail") return "Gmail";
   if (provider === "imap") return "IMAP";
   return provider;
 }
 
 export function accountOptionLabel(a: Pick<Account, "provider" | "label" | "email_address">): string {
-  const kind = a.provider === "gmail" ? "Gmail" : "Mailcow";
+  const kind = "Mailcow";
   const addr = a.email_address && a.email_address !== a.label ? ` (${a.email_address})` : "";
   return `${kind} · ${a.label}${addr}`;
 }

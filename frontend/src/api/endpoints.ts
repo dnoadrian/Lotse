@@ -59,8 +59,6 @@ export const updateImapAccount = (id: number, body: Partial<ImapInput>) =>
   api.put<Account>(`/api/mail-accounts/${enc(String(id))}/imap`, body);
 export const testAccount = (id: number) => api.post<Account>(`/api/mail-accounts/${enc(String(id))}/test`);
 export const removeAccount = (id: number) => api.del<OkResponse>(`/api/mail-accounts/${enc(String(id))}`);
-export const startGmail = (label: string) =>
-  api.post<{ authorization_url: string }>("/api/mail-accounts/gmail/start", { label });
 
 // Scans
 export const startScan = (account_id: number, since_days?: number) =>
@@ -85,7 +83,6 @@ export interface MessageQuery {
   page?: number;
   page_size?: number;
   only_registration?: boolean;
-  cursor?: string | null;
 }
 
 export function messagesPath(accountId: number, q: MessageQuery): string {
@@ -94,7 +91,6 @@ export function messagesPath(accountId: number, q: MessageQuery): string {
   params.set("page", String(q.page ?? 1));
   params.set("page_size", String(q.page_size ?? 50));
   params.set("only_registration", q.only_registration ? "true" : "false");
-  params.set("cursor", q.cursor ?? "");
   return `/api/mail/${enc(String(accountId))}/messages?${params.toString()}`;
 }
 

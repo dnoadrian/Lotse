@@ -12,7 +12,6 @@ import {
   canConfirm,
   forcedPermanent,
   needsConfirmation,
-  permanentAllowed,
   type DeletePlan,
 } from "../lib/deleteLogic";
 
@@ -42,7 +41,6 @@ export function DeleteDialog({
   const titleId = `${uid}-title`;
   const descId = `${uid}-desc`;
   const forced = forcedPermanent(provider, folderSpecial);
-  const allowPermanent = permanentAllowed(provider);
   const [permanent, setPermanent] = useState(forced);
   const [word, setWord] = useState("");
   const [busy, setBusy] = useState(false);
@@ -59,7 +57,10 @@ export function DeleteDialog({
     setBusy(true);
     setError(null);
     try {
-      const result = await ep.deleteMessages(accountId, buildDeleteRequest(plan, permanent, word));
+      const result = await ep.deleteMessages(
+        accountId,
+        buildDeleteRequest(plan, permanent, word),
+      );
       onDone(result);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -72,10 +73,17 @@ export function DeleteDialog({
   }
 
   const confirmLabel =
-    (permanent ? "Endgültig löschen" : "In Papierkorb verschieben") + (plan.count > 1 ? ` (${plan.count})` : "");
+    (permanent ? "Endgültig löschen" : "In Papierkorb verschieben") +
+    (plan.count > 1 ? ` (${plan.count})` : "");
 
   return (
-    <Modal onClose={onCancel} labelledBy={titleId} describedBy={descId} busy={busy} initialFocus={cancelRef}>
+    <Modal
+      onClose={onCancel}
+      labelledBy={titleId}
+      describedBy={descId}
+      busy={busy}
+      initialFocus={cancelRef}
+    >
       <form className="stack-18" onSubmit={submit}>
         <div className="dialog-head">
           <span className="dialog-icon dialog-icon-red" aria-hidden="true">
@@ -90,32 +98,28 @@ export function DeleteDialog({
         <fieldset className="radio-group">
           <legend>Art der Löschung</legend>
           <label className={`radio${forced ? " is-disabled" : ""}`}>
-            <input type="radio" name={`${uid}-mode`} checked={!permanent} disabled={forced} onChange={() => setPermanent(false)} />
+            <input
+              type="radio"
+              name={`${uid}-mode`}
+              checked={!permanent}
+              disabled={forced}
+              onChange={() => setPermanent(false)}
+            />
             In den Papierkorb verschieben
           </label>
-          <label className={`radio${!allowPermanent ? " is-disabled" : ""}`}>
+          <label className="radio">
             <input
               type="radio"
               name={`${uid}-mode`}
               checked={permanent}
-              disabled={!allowPermanent}
               onChange={() => setPermanent(true)}
-              aria-describedby={!allowPermanent ? `${uid}-gmail` : undefined}
             />
             Endgültig löschen (nicht umkehrbar)
           </label>
-          {!allowPermanent ? (
-            <p id={`${uid}-gmail`} className="muted small no-margin">
-              Bei Gmail verschiebt Quitly Nachrichten nur in den Papierkorb, weil dafür bewusst kein Vollzugriff angefordert
-              wird. Google löscht sie dort nach 30 Tagen automatisch.
-            </p>
-          ) : null}
-          {isTrash && provider === "imap" ? (
-            <p className="text-red small no-margin">Dieser Ordner ist der Papierkorb – Löschen ist hier immer endgültig.</p>
-          ) : null}
-          {isTrash && provider === "gmail" ? (
-            <p className="muted small no-margin">
-              Diese Nachrichten liegen bereits im Papierkorb. Google entfernt sie dort nach 30 Tagen endgültig.
+          {isTrash ? (
+            <p className="text-red small no-margin">
+              Dieser Ordner ist der Papierkorb – Löschen ist hier immer
+              endgültig.
             </p>
           ) : null}
         </fieldset>
@@ -123,7 +127,8 @@ export function DeleteDialog({
         {needsWord ? (
           <label className="field">
             <span>
-              Zur Bestätigung <strong className="mono">{CONFIRM_WORD}</strong> eingeben
+              Zur Bestätigung <strong className="mono">{CONFIRM_WORD}</strong>{" "}
+              eingeben
             </span>
             <input
               className="input mono"
@@ -141,10 +146,20 @@ export function DeleteDialog({
         {error ? <ErrorBox>{error}</ErrorBox> : null}
 
         <div className="dialog-actions">
-          <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
+          <button
+            ref={cancelRef}
+            type="button"
+            className="btn btn-secondary"
+            onClick={onCancel}
+            disabled={busy}
+          >
             Abbrechen
           </button>
-          <button type="submit" className="btn btn-danger" disabled={!ok || busy}>
+          <button
+            type="submit"
+            className="btn btn-danger"
+            disabled={!ok || busy}
+          >
             {busy ? "Wird gelöscht …" : confirmLabel}
           </button>
         </div>

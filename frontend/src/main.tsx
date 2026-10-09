@@ -1,12 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 // Schriften lokal aus npm (keine externen Anfragen)
-import "@fontsource/geist-sans/latin-400.css";
-import "@fontsource/geist-sans/latin-500.css";
-import "@fontsource/geist-sans/latin-600.css";
-import "@fontsource/geist-sans/latin-700.css";
-import "@fontsource/geist-mono/latin-400.css";
-import "@fontsource/geist-mono/latin-500.css";
+import "@fontsource-variable/bricolage-grotesque/index.css";
+import "@fontsource-variable/instrument-sans/index.css";
+import "@fontsource-variable/jetbrains-mono/index.css";
 import "./styles/app.css";
 import { App } from "./App";
 import { applyTheme, readStoredTheme } from "./lib/theme";

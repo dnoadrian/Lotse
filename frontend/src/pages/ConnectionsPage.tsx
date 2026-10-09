@@ -1,6 +1,13 @@
 // „Verbindungen“: Postfächer verwalten und Scans starten (Connect.dc.html).
-import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import { errorText } from "../api/client";
 import * as ep from "../api/endpoints";
 import type { Account, AppConfig } from "../api/types";
@@ -10,13 +17,6 @@ import { ScanProgressList } from "../components/ScanProgress";
 import { Banner, ErrorBox, PageHeader, Spinner } from "../components/ui";
 import { formatDateTime } from "../lib/format";
 import { isActive, useScans } from "../lib/scans";
-import { isGoogleAuthUrl } from "../lib/url";
-
-const GMAIL_RESULTS: Record<string, { kind: "success" | "error" | "info"; text: string }> = {
-  ok: { kind: "success", text: "Gmail wurde verbunden. Du kannst jetzt einen Scan starten." },
-  fehler: { kind: "error", text: "Die Verbindung mit Gmail ist fehlgeschlagen. Bitte versuche es erneut." },
-  abgebrochen: { kind: "info", text: "Die Anmeldung bei Google wurde abgebrochen. Es wurde nichts gespeichert." },
-};
 
 const SINCE_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "Alle Nachrichten" },
@@ -45,12 +45,23 @@ function ImapFields({
   idPrefix: string;
   allowedPorts: number[];
 }) {
-  const set = (k: keyof ImapFormValues) => (e: ChangeEvent<HTMLInputElement>) => onChange({ ...values, [k]: e.target.value });
+  const set = (k: keyof ImapFormValues) => (e: ChangeEvent<HTMLInputElement>) =>
+    onChange({ ...values, [k]: e.target.value });
   return (
     <>
       <label className="field">
         Bezeichnung
-        <input className="input" type="text" name="label" autoComplete="off" maxLength={80} required value={values.label} onChange={set("label")} placeholder="Mailcow" />
+        <input
+          className="input"
+          type="text"
+          name="label"
+          autoComplete="off"
+          maxLength={80}
+          required
+          value={values.label}
+          onChange={set("label")}
+          placeholder="Mailcow"
+        />
       </label>
       <div className="grid-host">
         <label className="field">
@@ -81,8 +92,12 @@ function ImapFields({
             maxLength={5}
             required
             value={values.port}
-            onChange={(e) => onChange({ ...values, port: e.target.value.replace(/\D/g, "") })}
-            aria-describedby={allowedPorts.length ? `${idPrefix}-ports` : undefined}
+            onChange={(e) =>
+              onChange({ ...values, port: e.target.value.replace(/\D/g, "") })
+            }
+            aria-describedby={
+              allowedPorts.length ? `${idPrefix}-ports` : undefined
+            }
           />
         </label>
       </div>
@@ -118,7 +133,9 @@ function ImapFields({
           value={values.password}
           onChange={set("password")}
         />
-        {passwordHint ? <span className="muted small field-hint">{passwordHint}</span> : null}
+        {passwordHint ? (
+          <span className="muted small field-hint">{passwordHint}</span>
+        ) : null}
       </label>
     </>
   );
@@ -129,9 +146,21 @@ function validPort(port: string): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : null;
 }
 
-function AddImapCard({ allowedPorts, onAdded }: { allowedPorts: number[]; onAdded: (a: Account) => void }) {
+function AddImapCard({
+  allowedPorts,
+  onAdded,
+}: {
+  allowedPorts: number[];
+  onAdded: (a: Account) => void;
+}) {
   const idPrefix = useId();
-  const empty: ImapFormValues = { label: "Mailcow", host: "", port: String(allowedPorts[0] ?? 993), username: "", password: "" };
+  const empty: ImapFormValues = {
+    label: "Mailcow",
+    host: "",
+    port: String(allowedPorts[0] ?? 993),
+    username: "",
+    password: "",
+  };
   const [values, setValues] = useState<ImapFormValues>(empty);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +168,12 @@ function AddImapCard({ allowedPorts, onAdded }: { allowedPorts: number[]; onAdde
   async function submit(e: FormEvent) {
     e.preventDefault();
     const port = validPort(values.port);
-    if (!values.label.trim() || !values.host.trim() || !values.username.trim() || !values.password) {
+    if (
+      !values.label.trim() ||
+      !values.host.trim() ||
+      !values.username.trim() ||
+      !values.password
+    ) {
       setError("Bitte alle Felder ausfüllen.");
       return;
     }
@@ -175,14 +209,29 @@ function AddImapCard({ allowedPorts, onAdded }: { allowedPorts: number[]; onAdde
         </div>
       </div>
       <form className="stack-18" onSubmit={submit} noValidate>
-        <ImapFields values={values} onChange={setValues} idPrefix={idPrefix} allowedPorts={allowedPorts} />
+        <ImapFields
+          values={values}
+          onChange={setValues}
+          idPrefix={idPrefix}
+          allowedPorts={allowedPorts}
+        />
         <div className="check-list">
           <span>
-            <Icon name="check" size={16} strokeWidth={2.2} className="text-green" />
+            <Icon
+              name="check"
+              size={16}
+              strokeWidth={2.2}
+              className="text-green"
+            />
             Zertifikat wird geprüft
           </span>
           <span>
-            <Icon name="check" size={16} strokeWidth={2.2} className="text-green" />
+            <Icon
+              name="check"
+              size={16}
+              strokeWidth={2.2}
+              className="text-green"
+            />
             TLS-Verbindung, keine unverschlüsselte Rückfallebene
           </span>
         </div>
@@ -197,75 +246,52 @@ function AddImapCard({ allowedPorts, onAdded }: { allowedPorts: number[]; onAdde
   );
 }
 
-function GmailCard({ config }: { config: AppConfig | null }) {
+function ImapHelpCard() {
   const idPrefix = useId();
-  const [label, setLabel] = useState("Gmail");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function start() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await ep.startGmail(label.trim() || "Gmail");
-      if (!isGoogleAuthUrl(res.authorization_url)) {
-        setError("Unerwartete Weiterleitungsadresse – Anmeldung abgebrochen.");
-        setBusy(false);
-        return;
-      }
-      window.location.assign(res.authorization_url);
-    } catch (err) {
-      setError(errorText(err));
-      setBusy(false);
-    }
-  }
-
-  const enabled = !!config?.gmail_enabled;
   return (
-    <section aria-labelledby={`${idPrefix}-h`} className="card conn-card">
-      <div className="conn-head">
-        <div className="stack-2">
-          <h2 id={`${idPrefix}-h`}>Gmail</h2>
-          <span className="muted small">Offizielle Gmail API · optional</span>
-        </div>
+    <section
+      aria-labelledby={`${idPrefix}-h`}
+      className="card conn-card help-card"
+    >
+      <div className="stack-2">
+        <h2 id={`${idPrefix}-h`}>Was trage ich ein?</h2>
+        <span className="muted small">
+          Die Daten findest du in Mailcow unter „Mailbox“.
+        </span>
       </div>
-      <p className="muted no-margin">
-        Du meldest dich direkt bei Google an. Quitly sieht dein Google-Passwort nie und speichert nur das Zugriffstoken,
-        verschlüsselt.
-      </p>
-      <div className="perm-box">
-        <span className="strong">Angefragte Berechtigungen</span>
-        <div className="perm-row">
-          <span className="mono small tone-link">gmail.modify</span>
-          <span className="muted small">
-            Absender, Betreff und Datum für die Erkennung lesen und Nachrichten in den Papierkorb verschieben (nur auf
-            deine Anweisung). Kein Vollzugriff.
-          </span>
+      <dl className="help-list">
+        <div>
+          <dt>Bezeichnung</dt>
+          <dd>Ein Name nur für dich, z. B. „Privat“ oder „Arbeit“.</dd>
         </div>
-      </div>
-      {enabled ? (
-        <>
-          <label className="field">
-            Bezeichnung
-            <input className="input" type="text" maxLength={80} value={label} onChange={(e) => setLabel(e.target.value)} />
-          </label>
-          {error ? <ErrorBox>{error}</ErrorBox> : null}
-          <div className="row-wrap push-bottom">
-            <button type="button" className="btn btn-secondary btn-strong" onClick={() => void start()} disabled={busy}>
-              {busy ? "Weiterleitung …" : "Mit Google anmelden"}
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="error-box">
-          <Icon name="info" size={16} strokeWidth={2} className="error-box-icon" />
-          <span>
-            Für Gmail brauchst du eine eigene OAuth-Client-ID aus der Google Cloud Console. Trage sie als{" "}
-            <code>QUITLY_GOOGLE_CLIENT_ID</code> und <code>QUITLY_GOOGLE_CLIENT_SECRET</code> ein und starte Quitly neu. Die
-            Einrichtung steht in der Installationsanleitung.
-          </span>
+        <div>
+          <dt>Server</dt>
+          <dd>
+            Der Name deines Mailservers, meist{" "}
+            <span className="mono">mail.deine-domain.at</span> – ohne https://
+            davor.
+          </dd>
         </div>
-      )}
+        <div>
+          <dt>Port</dt>
+          <dd>
+            <span className="mono">993</span> – IMAP über TLS. Quitly verbindet
+            sich nie unverschlüsselt.
+          </dd>
+        </div>
+        <div>
+          <dt>Benutzer</dt>
+          <dd>Deine vollständige E-Mail-Adresse.</dd>
+        </div>
+        <div>
+          <dt>App-Passwort</dt>
+          <dd>
+            Am besten ein eigenes App-Passwort mit IMAP-Recht (Mailcow → Mailbox
+            → App-Passwörter). So kannst du den Zugang jederzeit widerrufen,
+            ohne dein Hauptpasswort zu ändern.
+          </dd>
+        </div>
+      </dl>
     </section>
   );
 }
@@ -292,8 +318,13 @@ function AccountCard({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [values, setValues] = useState<ImapFormValues>({ label: "", host: "", port: "", username: "", password: "" });
-  const isImap = account.provider === "imap";
+  const [values, setValues] = useState<ImapFormValues>({
+    label: "",
+    host: "",
+    port: "",
+    username: "",
+    password: "",
+  });
 
   function openEdit() {
     setValues({
@@ -331,10 +362,16 @@ function AccountCard({
       return;
     }
     const body: Partial<ep.ImapInput> = {};
-    if (values.label.trim() && values.label.trim() !== account.label) body.label = values.label.trim();
-    if (values.host.trim() && values.host.trim() !== account.imap_host) body.host = values.host.trim();
+    if (values.label.trim() && values.label.trim() !== account.label)
+      body.label = values.label.trim();
+    if (values.host.trim() && values.host.trim() !== account.imap_host)
+      body.host = values.host.trim();
     if (port !== account.imap_port) body.port = port;
-    if (values.username.trim() && values.username.trim() !== account.email_address) body.username = values.username.trim();
+    if (
+      values.username.trim() &&
+      values.username.trim() !== account.email_address
+    )
+      body.username = values.username.trim();
     if (values.password) body.password = values.password;
     setBusy("save");
     setError(null);
@@ -357,7 +394,7 @@ function AccountCard({
           <h2 id={`${idPrefix}-h`} className="truncate">
             {account.label}
           </h2>
-          <span className="muted small">{isImap ? "Mailcow · IMAP über TLS" : "Gmail · Offizielle API"}</span>
+          <span className="muted small">Mailcow · IMAP über TLS</span>
         </div>
         {account.status === "ok" ? (
           <span className="pill pill-green">
@@ -375,19 +412,21 @@ function AccountCard({
       <dl className="kv">
         <dt>Adresse</dt>
         <dd className="break">{account.email_address || "—"}</dd>
-        {isImap ? (
-          <>
-            <dt>Server</dt>
-            <dd className="mono break">
-              {account.imap_host}:{account.imap_port}
-            </dd>
-          </>
-        ) : null}
+        <dt>Server</dt>
+        <dd className="mono break">
+          {account.imap_host}:{account.imap_port}
+        </dd>
         <dt>Letzter Scan</dt>
-        <dd>{account.last_scan_at ? formatDateTime(account.last_scan_at) : "Noch nie"}</dd>
+        <dd>
+          {account.last_scan_at
+            ? formatDateTime(account.last_scan_at)
+            : "Noch nie"}
+        </dd>
       </dl>
 
-      {account.status === "error" && account.last_error ? <ErrorBox>{account.last_error}</ErrorBox> : null}
+      {account.status === "error" && account.last_error ? (
+        <ErrorBox>{account.last_error}</ErrorBox>
+      ) : null}
       {error ? <ErrorBox>{error}</ErrorBox> : null}
       {info ? (
         <p className="text-green small no-margin" role="status">
@@ -405,21 +444,39 @@ function AccountCard({
             passwordHint="Gespeichert und verschlüsselt. Leer lassen, um das bisherige Passwort zu behalten."
           />
           <div className="row-wrap">
-            <button type="submit" className="btn btn-primary" disabled={busy !== null}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={busy !== null}
+            >
               {busy === "save" ? "Wird geprüft …" : "Speichern"}
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setEditing(false)} disabled={busy !== null}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setEditing(false)}
+              disabled={busy !== null}
+            >
               Abbrechen
             </button>
           </div>
         </form>
       ) : (
         <div className="row-wrap push-bottom">
-          <button type="button" className="btn btn-secondary" onClick={() => void test()} disabled={busy !== null}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => void test()}
+            disabled={busy !== null}
+          >
             {busy === "test" ? "Wird getestet …" : "Verbindung testen"}
           </button>
           {scanning ? (
-            <button type="button" className="btn btn-secondary text-red" onClick={onCancelScan}>
+            <button
+              type="button"
+              className="btn btn-secondary text-red"
+              onClick={onCancelScan}
+            >
               Scan abbrechen
             </button>
           ) : (
@@ -427,12 +484,18 @@ function AccountCard({
               Scan starten
             </button>
           )}
-          {isImap ? (
-            <button type="button" className="btn btn-secondary" onClick={openEdit}>
-              Bearbeiten
-            </button>
-          ) : null}
-          <button type="button" className="btn btn-danger-text push-right" onClick={() => onRemove(account)}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={openEdit}
+          >
+            Bearbeiten
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger-text push-right"
+            onClick={() => onRemove(account)}
+          >
             Entfernen
           </button>
         </div>
@@ -441,7 +504,15 @@ function AccountCard({
   );
 }
 
-function RemoveDialog({ account, onCancel, onRemoved }: { account: Account; onCancel: () => void; onRemoved: () => void }) {
+function RemoveDialog({
+  account,
+  onCancel,
+  onRemoved,
+}: {
+  account: Account;
+  onCancel: () => void;
+  onRemoved: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -459,7 +530,13 @@ function RemoveDialog({ account, onCancel, onRemoved }: { account: Account; onCa
   }
 
   return (
-    <Modal onClose={onCancel} labelledBy="remove-title" describedBy="remove-desc" busy={busy} initialFocus={cancelRef}>
+    <Modal
+      onClose={onCancel}
+      labelledBy="remove-title"
+      describedBy="remove-desc"
+      busy={busy}
+      initialFocus={cancelRef}
+    >
       <div className="dialog-head">
         <span className="dialog-icon dialog-icon-red" aria-hidden="true">
           <Icon name="alert" size={20} strokeWidth={2} />
@@ -467,16 +544,26 @@ function RemoveDialog({ account, onCancel, onRemoved }: { account: Account; onCa
         <h2 id="remove-title">Postfach „{account.label}“ entfernen?</h2>
       </div>
       <p id="remove-desc" className="muted no-margin">
-        Quitly löscht die gespeicherten Zugangsdaten
-        {account.provider === "gmail" ? " und widerruft den Google-Zugriff" : ""}. Deine E-Mails auf dem Server bleiben
-        unverändert.
+        Quitly löscht die gespeicherten Zugangsdaten. Deine E-Mails auf dem
+        Server bleiben unverändert.
       </p>
       {error ? <ErrorBox>{error}</ErrorBox> : null}
       <div className="dialog-actions">
-        <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
+        <button
+          ref={cancelRef}
+          type="button"
+          className="btn btn-secondary"
+          onClick={onCancel}
+          disabled={busy}
+        >
           Abbrechen
         </button>
-        <button type="button" className="btn btn-danger" onClick={() => void confirm()} disabled={busy}>
+        <button
+          type="button"
+          className="btn btn-danger"
+          onClick={() => void confirm()}
+          disabled={busy}
+        >
           {busy ? "Wird entfernt …" : "Entfernen"}
         </button>
       </div>
@@ -486,25 +573,16 @@ function RemoveDialog({ account, onCancel, onRemoved }: { account: Account; onCa
 
 export function ConnectionsPage() {
   const scans = useScans();
-  const [params, setParams] = useSearchParams();
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ kind: "success" | "error" | "info"; text: string } | null>(null);
+  const [notice, setNotice] = useState<{
+    kind: "success" | "error" | "info";
+    text: string;
+  } | null>(null);
   const [removing, setRemoving] = useState<Account | null>(null);
   const [since, setSince] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
-
-  // ?gmail=ok|fehler|abgebrochen einmalig anzeigen und aus der Adresse entfernen
-  useEffect(() => {
-    const g = params.get("gmail");
-    if (g && GMAIL_RESULTS[g]) {
-      setNotice(GMAIL_RESULTS[g]);
-      const next = new URLSearchParams(params);
-      next.delete("gmail");
-      setParams(next, { replace: true });
-    }
-  }, [params, setParams]);
 
   const load = useCallback(async () => {
     try {
@@ -558,7 +636,11 @@ export function ConnectionsPage() {
       {loadError ? (
         <Banner kind="error" title="Daten konnten nicht geladen werden">
           {loadError}{" "}
-          <button type="button" className="link-btn" onClick={() => void load()}>
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => void load()}
+          >
             Erneut versuchen
           </button>
         </Banner>
@@ -593,22 +675,34 @@ export function ConnectionsPage() {
               allowedPorts={allowedPorts}
               onAdded={(a) => {
                 setAccounts((prev) => [...(prev ?? []), a]);
-                setNotice({ kind: "success", text: `„${a.label}“ wurde verbunden. Starte jetzt einen Scan.` });
+                setNotice({
+                  kind: "success",
+                  text: `„${a.label}“ wurde verbunden. Starte jetzt einen Scan.`,
+                });
               }}
             />
-            <GmailCard config={config} />
+            <ImapHelpCard />
           </div>
 
           <section aria-labelledby="scan-h" className="card scan-card">
             <div className="scan-card-head">
               <div className="stack-4">
                 <h2 id="scan-h">Konten-Scan</h2>
-                <span className="muted">Quitly liest Absender, Betreff, Datum und den Anfang des Textes, um Konten zu erkennen. Inhalte werden nicht gespeichert, Anhänge nie geöffnet.</span>
+                <span className="muted">
+                  Quitly liest Absender, Betreff, Datum und den Anfang des
+                  Textes, um Konten zu erkennen. Inhalte werden nicht
+                  gespeichert, Anhänge nie geöffnet.
+                </span>
               </div>
               <div className="row-wrap align-end">
                 <label className="field-compact">
                   Zeitraum
-                  <select className="select" value={since} onChange={(e) => setSince(e.target.value)} disabled={scans.anyActive}>
+                  <select
+                    className="select"
+                    value={since}
+                    onChange={(e) => setSince(e.target.value)}
+                    disabled={scans.anyActive}
+                  >
                     {SINCE_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
@@ -617,19 +711,34 @@ export function ConnectionsPage() {
                   </select>
                 </label>
                 {scans.anyActive ? (
-                  <button type="button" className="btn btn-secondary text-red" onClick={() => void scans.cancelAll()}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-red"
+                    onClick={() => void scans.cancelAll()}
+                  >
                     Scan abbrechen
                   </button>
                 ) : (
-                  <button type="button" className="btn btn-primary" disabled={!list.length} onClick={() => void scan(list.map((a) => a.id))}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={!list.length}
+                    onClick={() => void scan(list.map((a) => a.id))}
+                  >
                     Scan starten
                   </button>
                 )}
               </div>
             </div>
-            {!list.length ? <p className="muted no-margin">Verbinde zuerst ein Postfach.</p> : null}
+            {!list.length ? (
+              <p className="muted no-margin">Verbinde zuerst ein Postfach.</p>
+            ) : null}
             {scanError ? <ErrorBox>{scanError}</ErrorBox> : null}
-            <ScanProgressList jobs={scans.jobs} accounts={list} onCancel={(id) => void scans.cancel(id)} />
+            <ScanProgressList
+              jobs={scans.jobs}
+              accounts={list}
+              onCancel={(id) => void scans.cancel(id)}
+            />
           </section>
         </>
       ) : null}
@@ -642,8 +751,13 @@ export function ConnectionsPage() {
             const removed = removing;
             setRemoving(null);
             scans.clear(removed.id);
-            setAccounts((prev) => prev?.filter((x) => x.id !== removed.id) ?? prev);
-            setNotice({ kind: "info", text: `„${removed.label}“ wurde entfernt.` });
+            setAccounts(
+              (prev) => prev?.filter((x) => x.id !== removed.id) ?? prev,
+            );
+            setNotice({
+              kind: "info",
+              text: `„${removed.label}“ wurde entfernt.`,
+            });
           }}
         />
       ) : null}

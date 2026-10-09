@@ -5,7 +5,6 @@ import {
   forcedPermanent,
   isConfirmationValid,
   needsConfirmation,
-  permanentAllowed,
   summarizeDeleteResult,
 } from "./deleteLogic";
 
@@ -43,14 +42,9 @@ describe("Bestätigungswort", () => {
 });
 
 describe("Provider-Regeln", () => {
-  it("Gmail erlaubt kein endgültiges Löschen", () => {
-    expect(permanentAllowed("gmail")).toBe(false);
-    expect(permanentAllowed("imap")).toBe(true);
-  });
   it("IMAP-Papierkorb löscht immer endgültig", () => {
     expect(forcedPermanent("imap", "trash")).toBe(true);
     expect(forcedPermanent("imap", "inbox")).toBe(false);
-    expect(forcedPermanent("gmail", "trash")).toBe(false);
   });
 });
 

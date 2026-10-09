@@ -22,11 +22,6 @@ export function canConfirm(mode: DeleteMode, count: number, permanent: boolean, 
   return !needsConfirmation(mode, count, permanent) || isConfirmationValid(word);
 }
 
-/** Gmail kennt in Quitly nur „in den Papierkorb“. */
-export function permanentAllowed(provider: Provider): boolean {
-  return provider !== "gmail";
-}
-
 /** Bei IMAP im Papierkorb ist jede Löschung endgültig. */
 export function forcedPermanent(provider: Provider, folderSpecial: string): boolean {
   return provider === "imap" && folderSpecial === "trash";
@@ -75,7 +70,7 @@ export function summarizeDeleteResult(r: DeleteResult): ResultSummary {
   if (r.already_missing > 0) notes.push(`${r.already_missing} waren bereits nicht mehr vorhanden.`);
   if (r.remaining > 0) {
     notes.push(
-      `Noch ${r.remaining} Nachrichten übrig: Gmail erlaubt höchstens 1000 pro Vorgang. Bitte den Vorgang erneut ausführen.`,
+      `Noch ${r.remaining} Nachrichten übrig. Bitte den Vorgang erneut ausführen.`,
     );
   }
   return { ok, headline, notes };

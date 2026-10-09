@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatCountdown, formatDate, parseDate } from "./format";
 import { pageTokens, totalPages } from "./pagination";
 import { stepState } from "./scans";
-import { buildMailto, isGoogleAuthUrl, isSafeHttpUrl } from "./url";
+import { buildMailto, isSafeHttpUrl } from "./url";
 
 describe("URL-Prüfungen", () => {
   it("zeigt nur http(s)-Links", () => {
@@ -12,13 +12,6 @@ describe("URL-Prüfungen", () => {
     expect(isSafeHttpUrl("data:text/html,x")).toBe(false);
     expect(isSafeHttpUrl("//example.com")).toBe(false);
     expect(isSafeHttpUrl(null)).toBe(false);
-  });
-
-  it("akzeptiert nur echte Google-OAuth-Adressen", () => {
-    expect(isGoogleAuthUrl("https://accounts.google.com/o/oauth2/v2/auth?x=1")).toBe(true);
-    expect(isGoogleAuthUrl("https://accounts.google.com.evil.example/")).toBe(false);
-    expect(isGoogleAuthUrl("https://accounts.google.com@evil.example/")).toBe(false);
-    expect(isGoogleAuthUrl("http://accounts.google.com/")).toBe(false);
   });
 
   it("baut mailto-Links kodiert", () => {

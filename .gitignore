@@ -18,5 +18,5 @@ frontend/dist/
 .DS_Store
 
 # Lokale Startskripte
-.lotse-root.crt
-.lotse-ca-trusted
+.quitly-root.crt
+.quitly-ca-trusted

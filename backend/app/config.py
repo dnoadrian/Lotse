@@ -1,4 +1,8 @@
-"""Zentrale Konfiguration. Alle Werte kommen aus Umgebungsvariablen (Präfix LOTSE_)."""
+"""Zentrale Konfiguration. Alle Werte kommen aus Umgebungsvariablen (Präfix QUITLY_).
+
+Die alten Namen mit Präfix LOTSE_ (vor der Umbenennung) werden weiterhin gelesen, wenn die
+entsprechende QUITLY_-Variable fehlt. So laufen bestehende .env-Dateien und der Render-Dienst ohne Änderung.
+"""
 from __future__ import annotations
 
 import base64
@@ -14,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="LOTSE_", env_file=None, extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="QUITLY_", env_file=None, extra="ignore")
 
     # Betrieb
     environment: str = "production"  # production | development | test
@@ -89,7 +93,7 @@ class Settings(BaseSettings):
     @property
     def cookie_name(self) -> str:
         # __Host- Präfix erzwingt Secure, Path=/ und keine Domain
-        return "__Host-lotse_session" if self.cookie_secure else "lotse_session"
+        return "__Host-quitly_session" if self.cookie_secure else "quitly_session"
 
     @property
     def allowed_ports(self) -> set[int]:
@@ -118,22 +122,32 @@ class Settings(BaseSettings):
         problems = []
         try:
             if len(base64.b64decode(self.secret_key, validate=True)) < 32:
-                problems.append("LOTSE_SECRET_KEY ist kürzer als 32 Bytes")
+                problems.append("QUITLY_SECRET_KEY ist kürzer als 32 Bytes")
         except Exception:
-            problems.append("LOTSE_SECRET_KEY fehlt oder ist kein gültiges base64")
+            problems.append("QUITLY_SECRET_KEY fehlt oder ist kein gültiges base64")
         try:
             self.decoded_key(self.encryption_key)
         except Exception:
-            problems.append("LOTSE_ENCRYPTION_KEY fehlt oder ist nicht 32 Bytes base64")
+            problems.append("QUITLY_ENCRYPTION_KEY fehlt oder ist nicht 32 Bytes base64")
         if self.is_production:
             if not self.public_url.startswith("https://"):
-                problems.append("LOTSE_PUBLIC_URL muss in Produktion mit https:// beginnen")
+                problems.append("QUITLY_PUBLIC_URL muss in Produktion mit https:// beginnen")
             if not self.cookie_secure:
-                problems.append("LOTSE_COOKIE_SECURE darf in Produktion nicht false sein")
+                problems.append("QUITLY_COOKIE_SECURE darf in Produktion nicht false sein")
         if problems:
             raise RuntimeError("Unsichere Konfiguration: " + "; ".join(problems))
 
 
+LEGACY_PREFIX = "LOTSE_"
+
+
+def _apply_legacy_env() -> None:
+    for key, value in list(os.environ.items()):
+        if key.startswith(LEGACY_PREFIX):
+            os.environ.setdefault("QUITLY_" + key[len(LEGACY_PREFIX):], value)
+
+
 @lru_cache
 def get_settings() -> Settings:
+    _apply_legacy_env()
     return Settings()

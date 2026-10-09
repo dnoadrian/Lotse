@@ -1,19 +1,19 @@
-name: lotse
+name: lotse  # alter Projektname bleibt, damit bestehende Docker-Volumes (Daten) erhalten bleiben
 
 services:
   caddy:
     build:
       context: .
       dockerfile: deploy/caddy/Dockerfile
-    image: lotse-web:latest
+    image: quitly-web:latest
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
       - "443:443/udp"
     environment:
-      LOTSE_DOMAIN: ${LOTSE_DOMAIN:?LOTSE_DOMAIN fehlt in .env}
-      LOTSE_TLS: ${LOTSE_TLS:?LOTSE_TLS fehlt in .env}
+      QUITLY_DOMAIN: ${QUITLY_DOMAIN:?QUITLY_DOMAIN fehlt in .env}
+      QUITLY_TLS: ${QUITLY_TLS:?QUITLY_TLS fehlt in .env}
     volumes:
       - caddy_data:/data
       - caddy_config:/config
@@ -28,15 +28,15 @@ services:
   backend:
     build:
       context: ./backend
-    image: lotse-backend:latest
+    image: quitly-backend:latest
     restart: unless-stopped
     env_file: .env
     environment:
-      LOTSE_ENVIRONMENT: production
-      LOTSE_PUBLIC_URL: https://${LOTSE_DOMAIN}
-      LOTSE_DATABASE_URL: postgresql+psycopg://lotse:${POSTGRES_PASSWORD}@db:5432/lotse
-      LOTSE_TRUSTED_PROXIES: "1"
-      LOTSE_COOKIE_SECURE: "true"
+      QUITLY_ENVIRONMENT: production
+      QUITLY_PUBLIC_URL: https://${QUITLY_DOMAIN}
+      QUITLY_DATABASE_URL: postgresql+psycopg://lotse:${POSTGRES_PASSWORD}@db:5432/lotse
+      QUITLY_TRUSTED_PROXIES: "1"
+      QUITLY_COOKIE_SECURE: "true"
     depends_on:
       db:
         condition: service_healthy
@@ -45,7 +45,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m
-    # Eigene CA für den Mailserver (falls nötig) einbinden und LOTSE_IMAP_CA_FILE=/certs/mail-ca.pem setzen:
+    # Eigene CA für den Mailserver (falls nötig) einbinden und QUITLY_IMAP_CA_FILE=/certs/mail-ca.pem setzen:
     # volumes:
     #   - ./certs/mail-ca.pem:/certs/mail-ca.pem:ro
     cap_drop: [ALL]

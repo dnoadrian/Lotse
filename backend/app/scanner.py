@@ -19,7 +19,7 @@ from .mail import gmail_client, imap_client
 from .mail.accounts import credentials
 from .models import Evidence, MailAccount, ScanJob, Service, utcnow
 
-log = logging.getLogger("lotse.scan")
+log = logging.getLogger("quitly.scan")
 
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="scan")
 _lock = threading.Lock()

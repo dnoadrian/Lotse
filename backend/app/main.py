@@ -17,7 +17,7 @@ from .jdm.catalog import get_catalog
 from .routers import accounts, auth, mail, scans, security, services
 from .security.middleware import SecurityMiddleware
 
-log = logging.getLogger("lotse")
+log = logging.getLogger("quitly")
 
 
 def _migrate(conn) -> None:
@@ -71,7 +71,7 @@ def create_app() -> FastAPI:
     get_catalog()  # früh laden: defekte Daten sollen den Start verhindern
 
     docs = None if s.is_production else "/api/docs"
-    app = FastAPI(title="Lotse", docs_url=docs, redoc_url=None, openapi_url=None if s.is_production else "/api/openapi.json")
+    app = FastAPI(title="Quitly", docs_url=docs, redoc_url=None, openapi_url=None if s.is_production else "/api/openapi.json")
     app.add_middleware(SecurityMiddleware)
 
     for r in (auth.router, security.router, accounts.router, scans.router, services.router, mail.router):

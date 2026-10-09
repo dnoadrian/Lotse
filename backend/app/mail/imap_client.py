@@ -24,7 +24,7 @@ import logging
 from ..config import get_settings
 from ..security.netguard import ResolvedTarget, resolve_target
 
-log = logging.getLogger("lotse.imap")
+log = logging.getLogger("quitly.imap")
 
 HEADER_FIELDS = "FROM SUBJECT DATE LIST-UNSUBSCRIBE AUTO-SUBMITTED"
 # Für die Text-Erkennung zusätzlich die MIME-Struktur

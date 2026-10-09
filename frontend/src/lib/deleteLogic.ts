@@ -22,7 +22,7 @@ export function canConfirm(mode: DeleteMode, count: number, permanent: boolean, 
   return !needsConfirmation(mode, count, permanent) || isConfirmationValid(word);
 }
 
-/** Gmail kennt in Lotse nur „in den Papierkorb“. */
+/** Gmail kennt in Quitly nur „in den Papierkorb“. */
 export function permanentAllowed(provider: Provider): boolean {
   return provider !== "gmail";
 }

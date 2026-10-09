@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .models import AuditLog
 from .security.sessions import client_ip
 
-log = logging.getLogger("lotse.audit")
+log = logging.getLogger("quitly.audit")
 
 FORBIDDEN_KEYS = {"password", "secret", "token", "code", "subject", "body", "refresh_token", "access_token"}
 

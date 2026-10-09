@@ -6,9 +6,9 @@
 	}
 }
 
-{$LOTSE_DOMAIN} {
-	# LOTSE_TLS: E-Mail-Adresse für Let's Encrypt (öffentliche Domain) oder "internal" (eigene CA, z. B. im LAN)
-	tls {$LOTSE_TLS}
+{$QUITLY_DOMAIN} {
+	# QUITLY_TLS: E-Mail-Adresse für Let's Encrypt (öffentliche Domain) oder "internal" (eigene CA, z. B. im LAN)
+	tls {$QUITLY_TLS}
 
 	encode zstd gzip
 

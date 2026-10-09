@@ -1,5 +1,5 @@
-// Schlanker Fetch-Client für die Lotse-API.
-// - Ändernde Anfragen tragen immer X-Lotse-Request: 1 und Content-Type: application/json
+// Schlanker Fetch-Client für die Quitly-API.
+// - Ändernde Anfragen tragen immer X-Quitly-Request: 1 und Content-Type: application/json
 // - Nach dem Login zusätzlich X-CSRF-Token (nur im Speicher gehalten, nie in localStorage)
 // - 401 → Callback (Weiterleitung zur Anmeldung)
 
@@ -15,7 +15,7 @@ export function isUnsafeMethod(method: string): boolean {
 export function buildHeaders(method: string, csrfToken: string | null | undefined): Record<string, string> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (isUnsafeMethod(method)) {
-    headers["X-Lotse-Request"] = "1";
+    headers["X-Quitly-Request"] = "1";
     headers["Content-Type"] = "application/json";
     if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
   }

@@ -173,7 +173,7 @@ def remove_account(account_id: int, request: Request, auth: Auth = Depends(requi
         try:
             gmail_client.revoke(credentials(acc)["secret"])
         except Exception:  # Widerruf ist best effort; das Token wird ohnehin gelöscht
-            logging.getLogger("lotse.gmail").warning("Gmail-Token konnte nicht widerrufen werden")
+            logging.getLogger("quitly.gmail").warning("Gmail-Token konnte nicht widerrufen werden")
     db.execute(delete(ScanJob).where(ScanJob.account_id == acc.id))
     db.execute(delete(Evidence).where(Evidence.account_id == acc.id))
     db.delete(acc)
@@ -189,7 +189,7 @@ def remove_account(account_id: int, request: Request, auth: Auth = Depends(requi
 @router.post("/api/mail-accounts/gmail/start")
 def gmail_start(body: GmailStartIn, auth: Auth = Depends(require_auth), db: Session = Depends(get_db)):
     if not get_settings().gmail_enabled:
-        raise HTTPException(400, "Gmail ist nicht eingerichtet (LOTSE_GOOGLE_CLIENT_ID/SECRET fehlen).")
+        raise HTTPException(400, "Gmail ist nicht eingerichtet (QUITLY_GOOGLE_CLIENT_ID/SECRET fehlen).")
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
     db.execute(delete(OAuthState).where(OAuthState.created_at < cutoff))
     state, verifier = new_token(32), new_token(48)

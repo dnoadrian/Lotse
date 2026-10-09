@@ -1,8 +1,8 @@
-# Lotse
+# Quitly
 
-**Lotse findet deine Online-Konten anhand deiner E-Mails und hilft dir, sie zu löschen.**
+**Quitly findet deine Online-Konten anhand deiner E-Mails und hilft dir, sie zu löschen.**
 
-Lotse verbindet sich mit deinem Mailcow-Postfach (IMAP) und optional mit Gmail (offizielle API),
+Quitly verbindet sich mit deinem Mailcow-Postfach (IMAP) und optional mit Gmail (offizielle API),
 erkennt Registrierungs-, Willkommens-, Bestätigungs- und Löschmails, fasst gefundene Dienste zusammen
 und ordnet sie den offiziellen Löschseiten aus dem [JustDeleteMe](https://github.com/jdm-contrib/jdm)-Datensatz zu.
 Außerdem kannst du einzelne, ausgewählte oder alle E-Mails eines Ordners löschen – mit Bestätigung
@@ -17,7 +17,7 @@ Selbst gehostet auf deinem eigenen Linux-Server mit Docker Compose und HTTPS.
   Erkennungsqualität (hoch/mittel/niedrig, in Prozent); erkannte Kontolöschungen setzen den Status automatisch.
 - **JustDeleteMe:** Lösch-Link, Schwierigkeit, Anleitung und ggf. Lösch-E-Mail-Adresse direkt aus dem
   Datensatz (2.665 Dienste, Stand siehe `backend/app/data/jdm/VERSION.json`). Gibt es keinen Eintrag,
-  zeigt Lotse keinen Link an – es werden keine Links erfunden.
+  zeigt Quitly keinen Link an – es werden keine Links erfunden.
 - **Dashboard:** Suche, Filter (Status, Qualität, mit/ohne Löschlink), Checkboxen, Massenaktionen,
   manueller Löschstatus (offen, angefragt, gelöscht, behalten), CSV-Export.
 - **E-Mail-Verwaltung:** Einzelne, ausgewählte, alle Mails eines Ordners oder nur erkannte
@@ -33,27 +33,27 @@ Selbst gehostet auf deinem eigenen Linux-Server mit Docker Compose und HTTPS.
 1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) installieren und einmal öffnen.
 2. Dieses Projekt herunterladen (grüner Knopf „Code“ → „Download ZIP“) und entpacken.
 3. Doppelklick auf
-   - **Windows:** `Lotse starten.bat`
-   - **macOS:** `Lotse starten.command` (beim ersten Mal: Rechtsklick → „Öffnen“)
-   - **Linux:** `lotse-starten.sh`
+   - **Windows:** `Quitly starten.bat`
+   - **macOS:** `Quitly starten.command` (beim ersten Mal: Rechtsklick → „Öffnen“)
+   - **Linux:** `quitly-starten.sh`
 
-Beim ersten Start richtet die Datei alles ein: Zufallsschlüssel, `lotse.at` zeigt auf deinen Rechner,
+Beim ersten Start richtet die Datei alles ein: Zufallsschlüssel, `quitly.at` zeigt auf deinen Rechner,
 die lokale HTTPS-Zertifizierungsstelle wird vertraut (dafür fragt das System einmal nach deinem Passwort)
-und du legst deinen Benutzer an. Danach öffnet sich `https://lotse.at` im Browser.
-Beenden mit `Lotse beenden.bat` bzw. `Lotse beenden.command`.
+und du legst deinen Benutzer an. Danach öffnet sich `https://quitly.at` im Browser.
+Beenden mit `Quitly beenden.bat` bzw. `Quitly beenden.command`.
 
-Hinweis: `lotse.at` zeigt dann **nur auf deinem Rechner** auf Lotse (Eintrag in der hosts-Datei).
-Andere Namen gehen auch: Umgebungsvariable `LOTSE_LOCAL_DOMAIN` vor dem Start setzen.
+Hinweis: `quitly.at` zeigt dann **nur auf deinem Rechner** auf Quitly (Eintrag in der hosts-Datei).
+Andere Namen gehen auch: Umgebungsvariable `QUITLY_LOCAL_DOMAIN` vor dem Start setzen.
 
 ## Schnellstart (Server)
 
 ```bash
-./scripts/generate-env.sh lotse.example.org admin@example.org   # erzeugt .env mit Zufallsschlüsseln
+./scripts/generate-env.sh quitly.example.org admin@example.org   # erzeugt .env mit Zufallsschlüsseln
 docker compose up -d --build
 docker compose exec backend python -m app.cli create-user dein-name
 ```
 
-Danach `https://lotse.example.org` öffnen.
+Danach `https://quitly.example.org` öffnen.
 
 **Nur lokal auf dem eigenen Rechner** (ohne Domain, mit lokaler HTTPS-CA):
 
@@ -94,9 +94,9 @@ cd frontend && npm install && npm run dev   # http://localhost:5173, /api → 12
 Zum lokalen Starten des Backends ohne HTTPS (nur Entwicklung):
 
 ```bash
-LOTSE_ENVIRONMENT=development LOTSE_COOKIE_SECURE=false LOTSE_PUBLIC_URL=http://localhost:5173 \
-LOTSE_DATABASE_URL=sqlite:///./dev.db LOTSE_SECRET_KEY=$(openssl rand -base64 32) \
-LOTSE_ENCRYPTION_KEY=$(openssl rand -base64 32) uvicorn app.main:create_app --factory --port 8000
+QUITLY_ENVIRONMENT=development QUITLY_COOKIE_SECURE=false QUITLY_PUBLIC_URL=http://localhost:5173 \
+QUITLY_DATABASE_URL=sqlite:///./dev.db QUITLY_SECRET_KEY=$(openssl rand -base64 32) \
+QUITLY_ENCRYPTION_KEY=$(openssl rand -base64 32) uvicorn app.main:create_app --factory --port 8000
 ```
 
 ## Lizenz und Daten

@@ -111,7 +111,7 @@ export function ServiceDetail({
             </>
           ) : (
             <p className="muted no-margin">
-              Kein JustDeleteMe-Eintrag. Lotse zeigt deshalb keinen Löschlink an – suche die Löschoption in den
+              Kein JustDeleteMe-Eintrag. Quitly zeigt deshalb keinen Löschlink an – suche die Löschoption in den
               Kontoeinstellungen des Dienstes.
             </p>
           )}

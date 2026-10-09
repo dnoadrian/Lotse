@@ -16,11 +16,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-HOST = os.environ.get("LOTSE_TEST_IMAP_HOST", "imap.lotse.test")
-PORT = int(os.environ.get("LOTSE_TEST_IMAP_PORT", "10993"))
-USER = "test@lotse.test"
+HOST = os.environ.get("QUITLY_TEST_IMAP_HOST", "imap.quitly.test")
+PORT = int(os.environ.get("QUITLY_TEST_IMAP_PORT", "10993"))
+USER = "test@quitly.test"
 PASS = "test-passwort-123"
-CA = os.environ.get("LOTSE_TEST_IMAP_CA", "/tmp/lotse-test-imap/ca.pem")
+CA = os.environ.get("QUITLY_TEST_IMAP_CA", "/tmp/quitly-test-imap/ca.pem")
 
 
 def _server_up() -> bool:
@@ -122,8 +122,8 @@ def test_untrusted_certificate_rejected(auth, settings_env, app, mailbox):
 
 
 def test_hostname_mismatch_rejected(auth, settings_env, app, mailbox):
-    settings_env(imap_allowed_hosts="falsch.lotse.test", imap_allowed_ports=str(PORT), imap_ca_file=CA)
-    r = auth.post("/api/mail-accounts/imap", json={"label": "x", "host": "falsch.lotse.test", "port": PORT,
+    settings_env(imap_allowed_hosts="falsch.quitly.test", imap_allowed_ports=str(PORT), imap_ca_file=CA)
+    r = auth.post("/api/mail-accounts/imap", json={"label": "x", "host": "falsch.quitly.test", "port": PORT,
                                                     "username": USER, "password": PASS})
     assert r.status_code == 400 and "Zertifikat" in r.json()["detail"]
 

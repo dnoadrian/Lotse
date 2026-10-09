@@ -10,7 +10,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: [["list"]],
   use: {
-    baseURL: process.env.LOTSE_E2E_URL ?? "https://localhost",
+    baseURL: process.env.QUITLY_E2E_URL ?? "https://localhost",
     // Caddy nutzt lokal eine eigene CA ("tls internal"); nur im Testbrowser ignorieren
     ignoreHTTPSErrors: true,
     locale: "de-AT",

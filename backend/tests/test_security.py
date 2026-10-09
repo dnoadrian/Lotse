@@ -55,17 +55,17 @@ def test_body_size_limit(client, user):
 def test_docs_disabled_in_production(settings_env, monkeypatch):
     from app import scanner
     from app.main import create_app
-    settings_env(environment="production", public_url="https://lotse.example", cookie_secure="true")
+    settings_env(environment="production", public_url="https://quitly.example", cookie_secure="true")
     monkeypatch.setattr(scanner, "submit", scanner.run)
-    with TestClient(create_app(), base_url="https://lotse.example") as c:
+    with TestClient(create_app(), base_url="https://quitly.example") as c:
         assert c.get("/api/docs").status_code == 404
         assert c.get("/api/openapi.json").status_code == 404
 
 
 @pytest.mark.parametrize("override,needle", [
-    ({"secret_key": ""}, "LOTSE_SECRET_KEY"),
-    ({"encryption_key": "zu-kurz"}, "LOTSE_ENCRYPTION_KEY"),
-    ({"environment": "production", "public_url": "http://lotse.example"}, "https://"),
+    ({"secret_key": ""}, "QUITLY_SECRET_KEY"),
+    ({"encryption_key": "zu-kurz"}, "QUITLY_ENCRYPTION_KEY"),
+    ({"environment": "production", "public_url": "http://quitly.example"}, "https://"),
     ({"environment": "production", "public_url": "https://x.example", "cookie_secure": "false"}, "COOKIE_SECURE"),
 ])
 def test_insecure_config_refused(settings_env, override, needle):
@@ -143,29 +143,29 @@ def test_secure_cookie_has_host_prefix(settings_env, monkeypatch):
     with TestClient(app, base_url="https://testserver") as c:
         r = c.post("/api/auth/login", json={"username": "carla-secure", "password": PASSWORD}, headers=H)
         cookie = r.headers["set-cookie"]
-        assert cookie.startswith("__Host-lotse_session=") and "Secure" in cookie
+        assert cookie.startswith("__Host-quitly_session=") and "Secure" in cookie
 
 
 def test_session_rotates_on_login(client, user):
     login(client)
-    first = client.cookies.get("lotse_session")
+    first = client.cookies.get("quitly_session")
     login(client)
-    second = client.cookies.get("lotse_session")
+    second = client.cookies.get("quitly_session")
     assert first and second and first != second
 
 
 def test_session_token_stored_hashed(client, user, db):
     login(client)
-    token = client.cookies.get("lotse_session")
+    token = client.cookies.get("quitly_session")
     stored = db.execute(select(UserSession.token_hash)).scalars().all()
     assert token not in stored and crypto.token_hash(token) in stored
 
 
 def test_logout_invalidates_session(client, user):
     s = login(client)
-    token = client.cookies.get("lotse_session")
+    token = client.cookies.get("quitly_session")
     assert s.post("/api/auth/logout").status_code == 200
-    client.cookies.set("lotse_session", token)
+    client.cookies.set("quitly_session", token)
     assert client.get("/api/mail-accounts").status_code == 401
 
 
@@ -429,16 +429,34 @@ def test_frontend_served_with_spa_fallback(settings_env, monkeypatch, tmp_path):
     from app import scanner
     from app.main import create_app
     (tmp_path / "assets").mkdir()
-    (tmp_path / "index.html").write_text("<!doctype html><title>Lotse</title>")
+    (tmp_path / "index.html").write_text("<!doctype html><title>Quitly</title>")
     (tmp_path / "assets" / "app.js").write_text("console.log(1)")
     (tmp_path.parent / "geheim.txt").write_text("geheim")
     settings_env(static_dir=str(tmp_path))
     monkeypatch.setattr(scanner, "submit", scanner.run)
     with TestClient(create_app()) as c:
-        assert "Lotse" in c.get("/konten").text
+        assert "Quitly" in c.get("/konten").text
         r = c.get("/assets/app.js")
         assert r.status_code == 200 and "immutable" in r.headers["cache-control"]
         assert "content-security-policy" in r.headers
         assert "geheim" not in c.get("/../geheim.txt").text
         assert "geheim" not in c.get("/%2e%2e/geheim.txt").text
         assert c.get("/api/gibt-es-nicht").status_code == 404
+
+
+def test_alte_lotse_variablen_werden_weiter_gelesen(monkeypatch):
+    from app import config
+
+    monkeypatch.delenv("QUITLY_OPEN_REGISTRATION", raising=False)
+    monkeypatch.delenv("QUITLY_REGISTRATIONS_PER_IP_PER_HOUR", raising=False)
+    monkeypatch.setenv("LOTSE_OPEN_REGISTRATION", "false")
+    monkeypatch.setenv("LOTSE_REGISTRATIONS_PER_IP_PER_HOUR", "7")
+    monkeypatch.setenv("QUITLY_REGISTRATIONS_PER_IP_PER_HOUR", "9")  # neuer Name hat Vorrang
+    config.get_settings.cache_clear()
+    try:
+        s = config.get_settings()
+        assert s.open_registration is False
+        assert s.registrations_per_ip_per_hour == 9
+    finally:
+        monkeypatch.delenv("QUITLY_OPEN_REGISTRATION", raising=False)
+        config.get_settings.cache_clear()

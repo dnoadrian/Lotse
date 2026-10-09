@@ -1,4 +1,4 @@
-# Lotse – HTTP-API
+# Quitly – HTTP-API
 
 Alle Endpunkte liegen unter `/api`. Antworten sind JSON, Fehler haben die Form `{"detail": "<deutsche Meldung>"}`.
 
@@ -6,7 +6,7 @@ Alle Endpunkte liegen unter `/api`. Antworten sind JSON, Fehler haben die Form `
 
 | Wann | Header |
 |---|---|
-| Jede ändernde Anfrage (POST/PUT/PATCH/DELETE) | `X-Lotse-Request: 1` und `Content-Type: application/json` |
+| Jede ändernde Anfrage (POST/PUT/PATCH/DELETE) | `X-Quitly-Request: 1` und `Content-Type: application/json` |
 | Jede ändernde Anfrage nach dem Login | zusätzlich `X-CSRF-Token: <csrf_token>` |
 
 Den `csrf_token` liefern `POST /api/auth/login`, `POST /api/auth/totp` und `GET /api/auth/session`.

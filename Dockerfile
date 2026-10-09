@@ -17,9 +17,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    LOTSE_STATIC_DIR=/app/static
+    QUITLY_STATIC_DIR=/app/static
 
-RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin lotse
+RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin quitly
 WORKDIR /app
 COPY backend/requirements.txt .
 RUN --mount=type=secret,id=ca,required=false \
@@ -28,7 +28,7 @@ RUN --mount=type=secret,id=ca,required=false \
 COPY backend/app ./app
 COPY --from=frontend /src/dist ./static
 
-USER lotse
+USER quitly
 # Render setzt PORT; lokal 8000
 ENV PORT=8000
 EXPOSE 8000

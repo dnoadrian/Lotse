@@ -45,7 +45,7 @@ function NotFound() {
   return (
     <div className="page">
       <h1>Seite nicht gefunden</h1>
-      <p className="muted">Diese Adresse gibt es in Lotse nicht.</p>
+      <p className="muted">Diese Adresse gibt es in Quitly nicht.</p>
     </div>
   );
 }

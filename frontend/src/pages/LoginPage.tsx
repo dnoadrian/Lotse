@@ -156,7 +156,7 @@ export function LoginPage() {
       <div className="login-col">
         <div className="login-brand">
           <LogoMark size={56} />
-          <span className="login-wordmark">Lotse</span>
+          <span className="login-wordmark">Quitly</span>
         </div>
 
         <div className="card login-card">

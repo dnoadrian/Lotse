@@ -227,7 +227,7 @@ export function EmailsPage() {
       count: n,
       uidvalidity,
       title: n === 1 ? `1 Nachricht aus „${folderName}“ löschen?` : `${n} Nachrichten aus „${folderName}“ löschen?`,
-      body: "Die ausgewählten Nachrichten werden auf dem Server gelöscht. Lotse prüft danach, ob sie wirklich entfernt wurden.",
+      body: "Die ausgewählten Nachrichten werden auf dem Server gelöscht. Quitly prüft danach, ob sie wirklich entfernt wurden.",
     });
   }
 
@@ -560,7 +560,7 @@ export function EmailsPage() {
           ) : null}
 
           <p className="muted small no-margin">
-            Lotse zeigt nur Absender, Betreff und Datum. Mail-Inhalte werden weder gespeichert noch protokolliert. Die Suche
+            Quitly zeigt nur Absender, Betreff und Datum. Mail-Inhalte werden weder gespeichert noch protokolliert. Die Suche
             filtert nur die geladene Seite.
           </p>
         </section>

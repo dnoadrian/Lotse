@@ -5,15 +5,15 @@ import os
 
 import pytest
 
-# Standard: SQLite im Speicher. Mit LOTSE_TEST_DATABASE_URL laufen dieselben Tests gegen PostgreSQL.
-TEST_DB = os.environ.get("LOTSE_TEST_DATABASE_URL", "sqlite://")
+# Standard: SQLite im Speicher. Mit QUITLY_TEST_DATABASE_URL laufen dieselben Tests gegen PostgreSQL.
+TEST_DB = os.environ.get("QUITLY_TEST_DATABASE_URL", "sqlite://")
 os.environ.update({
-    "LOTSE_ENVIRONMENT": "test",
-    "LOTSE_DATABASE_URL": TEST_DB,
-    "LOTSE_SECRET_KEY": base64.b64encode(b"s" * 32).decode(),
-    "LOTSE_ENCRYPTION_KEY": base64.b64encode(b"k" * 32).decode(),
-    "LOTSE_COOKIE_SECURE": "false",
-    "LOTSE_PUBLIC_URL": "http://testserver",
+    "QUITLY_ENVIRONMENT": "test",
+    "QUITLY_DATABASE_URL": TEST_DB,
+    "QUITLY_SECRET_KEY": base64.b64encode(b"s" * 32).decode(),
+    "QUITLY_ENCRYPTION_KEY": base64.b64encode(b"k" * 32).decode(),
+    "QUITLY_COOKIE_SECURE": "false",
+    "QUITLY_PUBLIC_URL": "http://testserver",
 })
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -25,7 +25,7 @@ from app.models import User  # noqa: E402
 from app.security.passwords import hash_password  # noqa: E402
 
 PASSWORD = "korrekt-pferd-batterie-42"
-H = {"X-Lotse-Request": "1"}
+H = {"X-Quitly-Request": "1"}
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def settings_env(monkeypatch):
     """Erlaubt Tests, einzelne Einstellungen zu überschreiben."""
     def apply(**values):
         for k, v in values.items():
-            monkeypatch.setenv(f"LOTSE_{k.upper()}", str(v))
+            monkeypatch.setenv(f"QUITLY_{k.upper()}", str(v))
         get_settings.cache_clear()
     yield apply
     get_settings.cache_clear()

@@ -1,4 +1,7 @@
 # Render Blueprint: legt Web-Dienst und PostgreSQL-Datenbank an.
+# Hinweis zur Umbenennung Lotse → Quitly: Dienst-, Datenbank- und Variablennamen bleiben hier bewusst
+# bei "lotse"/LOTSE_. Neue Namen würden auf Render einen neuen Dienst mit leerer Datenbank und neuen
+# Schlüsseln anlegen (gespeicherte Zugangsdaten wären unlesbar). Quitly liest LOTSE_-Variablen weiterhin.
 # Render-Dashboard → New → Blueprint → dieses Repository wählen → Apply.
 services:
   - type: web

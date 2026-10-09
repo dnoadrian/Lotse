@@ -211,7 +211,7 @@ def _delete_imap(db, account, creds, folder, mode, ids, permanent, expected_coun
 def _delete_gmail(db, account, creds, folder, mode, ids, permanent, expected_count) -> dict:
     if permanent:
         raise OperationError(
-            "Endgültiges Löschen ist bei Gmail nicht aktiviert: Lotse fordert dafür bewusst keinen Vollzugriff an. "
+            "Endgültiges Löschen ist bei Gmail nicht aktiviert: Quitly fordert dafür bewusst keinen Vollzugriff an. "
             "Nachrichten im Gmail-Papierkorb werden von Google nach 30 Tagen automatisch gelöscht."
         )
     if not GMAIL_LABEL.match(folder):

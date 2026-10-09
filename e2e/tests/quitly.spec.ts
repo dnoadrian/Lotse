@@ -3,8 +3,8 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 
 // Ablauf wie ein echter Benutzer – ausschließlich gegen das Dovecot-Testpostfach.
-const USER = process.env.LOTSE_E2E_USER ?? "adrian";
-const PASS = process.env.LOTSE_E2E_PASS ?? "demo-passwort-2026";
+const USER = process.env.QUITLY_E2E_USER ?? "adrian";
+const PASS = process.env.QUITLY_E2E_PASS ?? "demo-passwort-2026";
 const SHOTS = new URL("../../docs/screenshots/", import.meta.url).pathname;
 mkdirSync(SHOTS, { recursive: true });
 
@@ -84,9 +84,9 @@ test("Postfach verbinden, scannen und Konten verwalten", async ({ page }) => {
 
   const form = page.locator("section", { has: page.getByRole("heading", { name: "Mailcow / IMAP hinzufügen" }) });
   await form.getByLabel("Bezeichnung").fill("Mailcow Test");
-  await form.getByLabel("Server").fill("imap.lotse.test");
+  await form.getByLabel("Server").fill("imap.quitly.test");
   await form.getByLabel("Port").fill("10993");
-  await form.getByLabel("Benutzer").fill("test@lotse.test");
+  await form.getByLabel("Benutzer").fill("test@quitly.test");
   await form.getByLabel("App-Passwort").fill("test-passwort-123");
   await form.getByRole("button", { name: "Verbinden & speichern" }).click();
   const card = page.locator("section[aria-label='Verbundene Postfächer']");

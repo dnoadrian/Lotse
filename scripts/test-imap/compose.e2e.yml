@@ -3,10 +3,10 @@
 services:
   backend:
     extra_hosts:
-      - "imap.lotse.test:host-gateway"
+      - "imap.quitly.test:host-gateway"
     environment:
-      LOTSE_IMAP_ALLOWED_HOSTS: imap.lotse.test
-      LOTSE_IMAP_ALLOWED_PORTS: "993,10993"
-      LOTSE_IMAP_CA_FILE: /certs/test-ca.pem
+      QUITLY_IMAP_ALLOWED_HOSTS: imap.quitly.test
+      QUITLY_IMAP_ALLOWED_PORTS: "993,10993"
+      QUITLY_IMAP_CA_FILE: /certs/test-ca.pem
     volumes:
-      - /tmp/lotse-test-imap/ca.pem:/certs/test-ca.pem:ro
+      - /tmp/quitly-test-imap/ca.pem:/certs/test-ca.pem:ro

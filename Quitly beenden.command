@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-# Doppelklick (macOS): beendet Lotse (Daten bleiben erhalten)
+# Doppelklick (macOS): beendet Quitly (Daten bleiben erhalten)
 cd "$(dirname "$0")" && docker compose stop

@@ -106,7 +106,7 @@ export function DeleteDialog({
           </label>
           {!allowPermanent ? (
             <p id={`${uid}-gmail`} className="muted small no-margin">
-              Bei Gmail verschiebt Lotse Nachrichten nur in den Papierkorb, weil dafür bewusst kein Vollzugriff angefordert
+              Bei Gmail verschiebt Quitly Nachrichten nur in den Papierkorb, weil dafür bewusst kein Vollzugriff angefordert
               wird. Google löscht sie dort nach 30 Tagen automatisch.
             </p>
           ) : null}

@@ -58,7 +58,7 @@ def totp_setup(request: Request, auth: Auth = Depends(require_auth), db: Session
     secret = pyotp.random_base32()
     auth.user.totp_pending_enc = encrypt(secret, totp_purpose(auth.user.id))
     db.commit()
-    uri = pyotp.TOTP(secret).provisioning_uri(name=auth.user.username, issuer_name="Lotse")
+    uri = pyotp.TOTP(secret).provisioning_uri(name=auth.user.username, issuer_name="Quitly")
     svg = qrcode.make(uri, image_factory=qrcode.image.svg.SvgPathImage, box_size=8, border=2).to_string()
     return {"secret": secret, "otpauth_uri": uri, "qr_svg_base64": base64.b64encode(svg).decode("ascii")}
 

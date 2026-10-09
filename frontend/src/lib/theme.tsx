@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type Theme = "light" | "dark";
-const STORAGE_KEY = "lotse-theme";
+const STORAGE_KEY = "quitly-theme";
 
 export function readStoredTheme(): Theme {
   try {

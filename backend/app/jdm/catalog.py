@@ -9,7 +9,7 @@ Datenstruktur von _data/sites.json – eine Liste von Objekten:
   url_<lang>  sprachspezifische Lösch-URL                  (optional)
   email, email_subject, email_body  Löschung per E-Mail    (optional)
 
-Lotse übernimmt ausschließlich diese Felder. Es werden keine Links erzeugt oder erraten:
+Quitly übernimmt ausschließlich diese Felder. Es werden keine Links erzeugt oder erraten:
 Ohne Treffer im Katalog gibt es keinen Lösch-Link.
 """
 from __future__ import annotations

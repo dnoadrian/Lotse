@@ -8,7 +8,7 @@ außer wo ausdrücklich angegeben (Gmail-API).
 | Bereich | Werkzeug | Ergebnis |
 |---|---|---|
 | Backend: Sicherheit, API, Erkennung, JDM, SSRF | pytest (SQLite) | **157 bestanden** |
-| Dieselben Tests gegen PostgreSQL 16 | pytest mit `LOTSE_TEST_DATABASE_URL` | **157 bestanden** |
+| Dieselben Tests gegen PostgreSQL 16 | pytest mit `QUITLY_TEST_DATABASE_URL` | **157 bestanden** |
 | davon IMAP-Integration gegen echten Dovecot-IMAPS-Server | pytest | **26 bestanden** |
 | davon Gmail gegen simulierte Google-API | pytest + respx | **13 bestanden** |
 | Frontend: API-Client, Status-/Lösch-Logik | vitest | **43 bestanden** |
@@ -18,7 +18,7 @@ außer wo ausdrücklich angegeben (Gmail-API).
 | Bekannte Schwachstellen Python-Abhängigkeiten | pip-audit | **0** |
 | Bekannte Schwachstellen npm (Frontend, E2E) | npm audit | **0** |
 | Container-Härtung | manuell | Backend läuft als UID 10001, Dateisystem schreibgeschützt, keine Capabilities |
-| Startskript (Linux) | manuell | Stack startet, lokale CA wird vertraut, `https://lotse.at` ohne Warnung |
+| Startskript (Linux) | manuell | Stack startet, lokale CA wird vertraut, `https://quitly.at` ohne Warnung |
 
 ## Was die Tests abdecken
 
@@ -50,19 +50,19 @@ außer wo ausdrücklich angegeben (Gmail-API).
 cd backend && pip install -r requirements-dev.txt
 sudo ../scripts/test-imap/start.sh      # echter IMAPS-Testserver (ohne ihn werden IMAP-Tests übersprungen)
 pytest
-LOTSE_TEST_DATABASE_URL=postgresql+psycopg://user:pw@127.0.0.1/lotse_test pytest   # optional PostgreSQL
+QUITLY_TEST_DATABASE_URL=postgresql+psycopg://user:pw@127.0.0.1/quitly_test pytest   # optional PostgreSQL
 
 # Frontend
 cd frontend && npm ci && npm run typecheck && npm test
 
 # Ende-zu-Ende (Stack muss laufen, Testserver auf allen Schnittstellen)
-sudo LOTSE_TEST_IMAP_LISTEN='*' scripts/test-imap/start.sh
+sudo QUITLY_TEST_IMAP_LISTEN='*' scripts/test-imap/start.sh
 docker compose -f docker-compose.yml -f scripts/test-imap/compose.e2e.yml up -d --build
 docker compose exec backend python -m app.cli create-user adrian
-cd e2e && npm ci && LOTSE_E2E_URL=https://lotse.at LOTSE_E2E_PASS=… npx playwright test
+cd e2e && npm ci && QUITLY_E2E_URL=https://quitly.at QUITLY_E2E_PASS=… npx playwright test
 ```
 
-Destruktive Tests laufen ausschließlich gegen das Testpostfach `test@lotse.test` auf `imap.lotse.test`;
+Destruktive Tests laufen ausschließlich gegen das Testpostfach `test@quitly.test` auf `imap.quitly.test`;
 `scripts/test-imap/seed.py` verweigert jeden anderen Host.
 
 ## Nicht automatisch getestet

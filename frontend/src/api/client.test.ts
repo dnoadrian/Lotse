@@ -11,21 +11,21 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
 describe("buildHeaders", () => {
   it("setzt bei GET keine Änderungs-Header", () => {
     const h = buildHeaders("GET", "tok");
-    expect(h["X-Lotse-Request"]).toBeUndefined();
+    expect(h["X-Quitly-Request"]).toBeUndefined();
     expect(h["X-CSRF-Token"]).toBeUndefined();
     expect(h["Content-Type"]).toBeUndefined();
   });
 
-  it.each(["POST", "PUT", "PATCH", "DELETE", "post"])("setzt bei %s X-Lotse-Request, JSON und CSRF", (m) => {
+  it.each(["POST", "PUT", "PATCH", "DELETE", "post"])("setzt bei %s X-Quitly-Request, JSON und CSRF", (m) => {
     const h = buildHeaders(m, "abc");
-    expect(h["X-Lotse-Request"]).toBe("1");
+    expect(h["X-Quitly-Request"]).toBe("1");
     expect(h["Content-Type"]).toBe("application/json");
     expect(h["X-CSRF-Token"]).toBe("abc");
   });
 
   it("lässt X-CSRF-Token vor dem Login weg", () => {
     const h = buildHeaders("POST", null);
-    expect(h["X-Lotse-Request"]).toBe("1");
+    expect(h["X-Quitly-Request"]).toBe("1");
     expect("X-CSRF-Token" in h).toBe(false);
   });
 });
@@ -58,7 +58,7 @@ describe("createApiClient", () => {
     expect(init.credentials).toBe("same-origin");
     expect(init.body).toBe(JSON.stringify({ ids: [1], status: "angefragt" }));
     const headers = init.headers as Record<string, string>;
-    expect(headers["X-Lotse-Request"]).toBe("1");
+    expect(headers["X-Quitly-Request"]).toBe("1");
     expect(headers["X-CSRF-Token"]).toBe("csrf-1");
   });
 

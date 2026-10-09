@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin lotse
+RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin quitly
 WORKDIR /app
 
 COPY requirements.txt .
@@ -17,11 +17,11 @@ RUN --mount=type=secret,id=ca,required=false \
 
 COPY --chown=root:root app ./app
 
-USER lotse
+USER quitly
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"
 
-# Kein Access-Log von uvicorn (würde Query-Strings mit OAuth-Codes enthalten) – Lotse loggt selbst datensparsam
+# Kein Access-Log von uvicorn (würde Query-Strings mit OAuth-Codes enthalten) – Quitly loggt selbst datensparsam
 CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", \
      "--workers", "2", "--no-access-log", "--no-server-header", "--timeout-graceful-shutdown", "20"]

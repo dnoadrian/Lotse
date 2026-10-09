@@ -1,7 +1,7 @@
 """Gmail-Integration gegen eine simulierte Google-API (respx).
 
 Echte Google-Zugangsdaten sind für automatische Tests nicht vorhanden; getestet wird daher das
-Protokollverhalten von Lotse (OAuth mit PKCE und State, Token-Speicherung, API-Aufrufe, Überprüfung).
+Protokollverhalten von Quitly (OAuth mit PKCE und State, Token-Speicherung, API-Aufrufe, Überprüfung).
 """
 from __future__ import annotations
 

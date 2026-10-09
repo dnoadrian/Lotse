@@ -2,9 +2,9 @@
 
 Regeln:
 - Hostname muss syntaktisch gültig sein (keine IP-Literale mit Tricks, kein Userinfo, keine Ports im Namen)
-- Port muss in LOTSE_IMAP_ALLOWED_PORTS stehen (Standard: nur 993/IMAPS)
+- Port muss in QUITLY_IMAP_ALLOWED_PORTS stehen (Standard: nur 993/IMAPS)
 - Alle aufgelösten Adressen müssen öffentlich sein – außer der Host steht ausdrücklich
-  in LOTSE_IMAP_ALLOWED_HOSTS (z. B. der eigene Mailcow im LAN)
+  in QUITLY_IMAP_ALLOWED_HOSTS (z. B. der eigene Mailcow im LAN)
 - Die Verbindung wird zur geprüften IP aufgebaut (kein zweites DNS-Lookup → kein DNS-Rebinding)
 """
 from __future__ import annotations
@@ -73,7 +73,7 @@ def resolve_target(host: str, port: int, resolver=socket.getaddrinfo) -> Resolve
         bad = [ip for ip in ips if not _is_public(ip)]
         if bad:
             raise HostNotAllowed(
-                "Der Server löst auf eine interne Adresse auf. Erlaube ihn ausdrücklich über LOTSE_IMAP_ALLOWED_HOSTS."
+                "Der Server löst auf eine interne Adresse auf. Erlaube ihn ausdrücklich über QUITLY_IMAP_ALLOWED_HOSTS."
             )
     # IPv4 bevorzugen (stabiler in Containern)
     ips.sort(key=lambda ip: ":" in ip)

@@ -172,7 +172,7 @@ function TotpCard({ enabled, onChanged }: { enabled: boolean; onChanged: (enable
       ) : (
         <div className="stack-18">
           <p className="muted no-margin">
-            Schütze dein Konto zusätzlich: Nach dem Passwort fragt Lotse dann einen Code aus deiner Authenticator-App ab.
+            Schütze dein Konto zusätzlich: Nach dem Passwort fragt Quitly dann einen Code aus deiner Authenticator-App ab.
           </p>
           <div className="row-wrap">
             <button type="button" className="btn btn-primary" onClick={() => void begin()} disabled={busy}>

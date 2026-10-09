@@ -8,7 +8,7 @@ _hasher = PasswordHasher()  # Argon2id, t=3, m=64 MiB, p=4
 
 # Wird verifiziert, wenn ein Benutzer nicht existiert, damit die Antwortzeit
 # nicht verrät, ob ein Benutzername vergeben ist.
-_DUMMY_HASH = _hasher.hash("lotse-dummy-password-for-timing")
+_DUMMY_HASH = _hasher.hash("quitly-dummy-password-for-timing")
 
 MIN_LENGTH = 4
 MAX_LENGTH = 256

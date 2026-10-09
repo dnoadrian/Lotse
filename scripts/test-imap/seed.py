@@ -1,7 +1,7 @@
 """Befüllt das lokale Dovecot-TESTPOSTFACH mit erfundenen Beispielmails (für E2E-Tests und Screenshots).
 
 Achtung: leert vorher alle Ordner des Testpostfachs. Niemals gegen ein echtes Postfach ausführen –
-das Skript verweigert jeden anderen Host als imap.lotse.test.
+das Skript verweigert jeden anderen Host als imap.quitly.test.
 
 Aufruf: python3 -I scripts/test-imap/seed.py
 """
@@ -15,9 +15,9 @@ from datetime import datetime, timedelta, timezone
 from email.header import Header
 from email.utils import format_datetime
 
-HOST, PORT = "imap.lotse.test", 10993
-USER, PASS = "test@lotse.test", "test-passwort-123"
-CA = "/tmp/lotse-test-imap/ca.pem"
+HOST, PORT = "imap.quitly.test", 10993
+USER, PASS = "test@quitly.test", "test-passwort-123"
+CA = "/tmp/quitly-test-imap/ca.pem"
 
 INBOX = [
     ("GitHub", "noreply@github.com", "Welcome to GitHub, test!", 2400),
@@ -65,12 +65,12 @@ def message(name: str, addr: str, subject: str, days: int) -> bytes:
     date = format_datetime(datetime.now(timezone.utc) - timedelta(days=days))
     sender = f"{Header(name, 'utf-8').encode()} <{addr}>"
     return (f"From: {sender}\r\nTo: {USER}\r\nSubject: {Header(subject, 'utf-8').encode()}\r\nDate: {date}\r\n"
-            f"Message-ID: <{time.time_ns()}@seed.lotse.test>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+            f"Message-ID: <{time.time_ns()}@seed.quitly.test>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
             f"Erfundene Testnachricht.\r\n").encode()
 
 
 def main() -> int:
-    if HOST != "imap.lotse.test":
+    if HOST != "imap.quitly.test":
         print("Verweigert: nur für das Testpostfach.")
         return 1
     c = imaplib.IMAP4_SSL(HOST, PORT, ssl_context=ssl.create_default_context(cafile=CA))

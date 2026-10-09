@@ -22,6 +22,7 @@ class DecryptionError(Exception):
 
 
 def _key_id(key: bytes) -> str:
+    # Fester Wert aus der Zeit vor der Umbenennung – ändern würde gespeicherte Daten unlesbar machen
     return hashlib.sha256(b"lotse-key-id" + key).hexdigest()[:8]
 
 

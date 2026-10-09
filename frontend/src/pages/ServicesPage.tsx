@@ -340,7 +340,7 @@ export function ServicesPage() {
         <div className="empty-card">
           <h2>Noch kein Postfach verbunden</h2>
           <p className="muted">
-            Verbinde dein Mailcow-Postfach (IMAP) oder Gmail. Lotse liest nur Kopfzeilen und erkennt daraus, bei welchen
+            Verbinde dein Mailcow-Postfach (IMAP) oder Gmail. Quitly liest Kopfzeilen und den Anfang jeder Mail und erkennt daraus, bei welchen
             Diensten du ein Konto hast.
           </p>
           <Link className="btn btn-primary" to="/verbindungen">
@@ -361,7 +361,7 @@ export function ServicesPage() {
           {all.length === 0 ? (
             <div className="empty-card">
               <h2>Noch keine Konten erkannt</h2>
-              <p className="muted">Starte einen Scan, damit Lotse deine Postfächer nach Registrierungs-Mails durchsucht.</p>
+              <p className="muted">Starte einen Scan, damit Quitly deine Postfächer nach Registrierungs-Mails durchsucht.</p>
               {scanButton}
             </div>
           ) : (
@@ -564,7 +564,7 @@ export function ServicesPage() {
               )}
               <p className="muted small no-margin">
                 Löschlinks stammen ausschließlich aus dem JustDeleteMe-Datensatz (jdm-contrib/jdm). Fehlt ein Eintrag, zeigt
-                Lotse keinen Link an. Den Status setzt du selbst, sobald die Löschung bestätigt ist.
+                Quitly keinen Link an. Den Status setzt du selbst, sobald die Löschung bestätigt ist.
               </p>
             </section>
           )}

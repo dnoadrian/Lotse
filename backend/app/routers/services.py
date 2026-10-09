@@ -130,5 +130,5 @@ def export_csv(auth: Auth = Depends(require_auth), db: Session = Depends(get_db)
     return Response(
         content="﻿" + buf.getvalue(),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": 'attachment; filename="lotse-konten.csv"'},
+        headers={"Content-Disposition": 'attachment; filename="quitly-konten.csv"'},
     )

@@ -1,4 +1,4 @@
-# Lotse – Frontend
+# Quitly – Frontend
 
 React 18, TypeScript, Vite, react-router. Keine UI-Bibliotheken; Design-Tokens als CSS-Variablen
 (hell = Standard, dunkel per Umschalter). Schriften Geist/Geist Mono werden selbst ausgeliefert.

@@ -15,7 +15,7 @@ export function Logo({ size = 28, textClass = "logo-text" }: { size?: number; te
   return (
     <span className="logo">
       <LogoMark size={size} />
-      <span className={textClass}>Lotse</span>
+      <span className={textClass}>Quitly</span>
     </span>
   );
 }

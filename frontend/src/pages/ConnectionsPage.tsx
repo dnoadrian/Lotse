@@ -230,7 +230,7 @@ function GmailCard({ config }: { config: AppConfig | null }) {
         </div>
       </div>
       <p className="muted no-margin">
-        Du meldest dich direkt bei Google an. Lotse sieht dein Google-Passwort nie und speichert nur das Zugriffstoken,
+        Du meldest dich direkt bei Google an. Quitly sieht dein Google-Passwort nie und speichert nur das Zugriffstoken,
         verschlüsselt.
       </p>
       <div className="perm-box">
@@ -261,7 +261,7 @@ function GmailCard({ config }: { config: AppConfig | null }) {
           <Icon name="info" size={16} strokeWidth={2} className="error-box-icon" />
           <span>
             Für Gmail brauchst du eine eigene OAuth-Client-ID aus der Google Cloud Console. Trage sie als{" "}
-            <code>LOTSE_GOOGLE_CLIENT_ID</code> und <code>LOTSE_GOOGLE_CLIENT_SECRET</code> ein und starte Lotse neu. Die
+            <code>QUITLY_GOOGLE_CLIENT_ID</code> und <code>QUITLY_GOOGLE_CLIENT_SECRET</code> ein und starte Quitly neu. Die
             Einrichtung steht in der Installationsanleitung.
           </span>
         </div>
@@ -467,7 +467,7 @@ function RemoveDialog({ account, onCancel, onRemoved }: { account: Account; onCa
         <h2 id="remove-title">Postfach „{account.label}“ entfernen?</h2>
       </div>
       <p id="remove-desc" className="muted no-margin">
-        Lotse löscht die gespeicherten Zugangsdaten
+        Quitly löscht die gespeicherten Zugangsdaten
         {account.provider === "gmail" ? " und widerruft den Google-Zugriff" : ""}. Deine E-Mails auf dem Server bleiben
         unverändert.
       </p>
@@ -603,7 +603,7 @@ export function ConnectionsPage() {
             <div className="scan-card-head">
               <div className="stack-4">
                 <h2 id="scan-h">Konten-Scan</h2>
-                <span className="muted">Lotse liest nur Absender, Betreff und Datum, um Registrierungen zu erkennen – keine Inhalte, keine Anhänge.</span>
+                <span className="muted">Quitly liest Absender, Betreff, Datum und den Anfang des Textes, um Konten zu erkennen. Inhalte werden nicht gespeichert, Anhänge nie geöffnet.</span>
               </div>
               <div className="row-wrap align-end">
                 <label className="field-compact">

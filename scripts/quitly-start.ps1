@@ -1,8 +1,8 @@
-# Startet Lotse lokal unter Windows und öffnet die Webseite.
-# Beim ersten Start: .env mit Zufallsschlüsseln, Eintrag für lotse.at in der hosts-Datei (Admin-Abfrage),
+# Startet Quitly lokal unter Windows und öffnet die Webseite.
+# Beim ersten Start: .env mit Zufallsschlüsseln, Eintrag für quitly.at in der hosts-Datei (Admin-Abfrage),
 # Vertrauen in die lokale HTTPS-Zertifizierungsstelle (Windows fragt nach) und erster Benutzer.
 $ErrorActionPreference = "Stop"
-$Domain = if ($env:LOTSE_LOCAL_DOMAIN) { $env:LOTSE_LOCAL_DOMAIN } else { "lotse.at" }
+$Domain = if ($env:QUITLY_LOCAL_DOMAIN) { $env:QUITLY_LOCAL_DOMAIN } else { "quitly.at" }
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
@@ -30,10 +30,10 @@ function RandomHex($n) { $b = New-Object byte[] $n; [System.Security.Cryptograph
 if (-not (Test-Path ".env")) {
     Say "Erster Start: Konfiguration mit neuen Zufallsschluesseln wird erstellt ..."
     $text = [IO.File]::ReadAllText((Join-Path $Root ".env.example"))
-    $text = $text -replace "(?m)^LOTSE_DOMAIN=.*$", "LOTSE_DOMAIN=$Domain"
-    $text = $text -replace "(?m)^LOTSE_TLS=.*$", "LOTSE_TLS=internal"
-    $text = $text -replace "(?m)^LOTSE_SECRET_KEY=.*$", ("LOTSE_SECRET_KEY=" + (RandomB64 32))
-    $text = $text -replace "(?m)^LOTSE_ENCRYPTION_KEY=.*$", ("LOTSE_ENCRYPTION_KEY=" + (RandomB64 32))
+    $text = $text -replace "(?m)^QUITLY_DOMAIN=.*$", "QUITLY_DOMAIN=$Domain"
+    $text = $text -replace "(?m)^QUITLY_TLS=.*$", "QUITLY_TLS=internal"
+    $text = $text -replace "(?m)^QUITLY_SECRET_KEY=.*$", ("QUITLY_SECRET_KEY=" + (RandomB64 32))
+    $text = $text -replace "(?m)^QUITLY_ENCRYPTION_KEY=.*$", ("QUITLY_ENCRYPTION_KEY=" + (RandomB64 32))
     $text = $text -replace "(?m)^POSTGRES_PASSWORD=.*$", ("POSTGRES_PASSWORD=" + (RandomHex 24))
     $text = $text -replace "`r`n", "`n"
     [IO.File]::WriteAllText((Join-Path $Root ".env"), $text, (New-Object System.Text.UTF8Encoding $false))
@@ -41,7 +41,7 @@ if (-not (Test-Path ".env")) {
     icacls ".env" /inheritance:r /grant:r "$($env:USERNAME):(R,W)" *> $null
 }
 
-# 3. lotse.at auf diesen Rechner zeigen lassen
+# 3. quitly.at auf diesen Rechner zeigen lassen
 $hosts = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
 $escaped = [regex]::Escape($Domain)
 if (-not (Select-String -Path $hosts -Pattern "^\s*[^#]\S*\s+$escaped(\s|$)" -Quiet)) {
@@ -51,36 +51,36 @@ if (-not (Select-String -Path $hosts -Pattern "^\s*[^#]\S*\s+$escaped(\s|$)" -Qu
 }
 
 # 4. Starten
-Say "Lotse wird gebaut und gestartet (beim ersten Mal einige Minuten) ..."
+Say "Quitly wird gebaut und gestartet (beim ersten Mal einige Minuten) ..."
 docker compose up -d --build
 if ($LASTEXITCODE -ne 0) { Fail "Start fehlgeschlagen. Details: docker compose logs" }
 
-Say "Warte, bis Lotse bereit ist ..."
+Say "Warte, bis Quitly bereit ist ..."
 $ok = $false
 for ($i = 0; $i -lt 90; $i++) {
     curl.exe -fsk --noproxy $Domain --resolve "${Domain}:443:127.0.0.1" "https://$Domain/api/health" *> $null
     if ($LASTEXITCODE -eq 0) { $ok = $true; break }
     Start-Sleep 2
 }
-if (-not $ok) { Fail "Lotse antwortet nicht. Details: docker compose logs" }
+if (-not $ok) { Fail "Quitly antwortet nicht. Details: docker compose logs" }
 
 # 5. Lokale HTTPS-CA von Caddy vertrauen (Windows zeigt einen Sicherheitsdialog)
-if (-not (Test-Path ".lotse-ca-trusted")) {
-    Say "Einmalig: Zertifikat der lokalen Lotse-CA wird als vertrauenswuerdig eingetragen ..."
-    docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt (Join-Path $Root ".lotse-root.crt") *> $null
-    Import-Certificate -FilePath (Join-Path $Root ".lotse-root.crt") -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
-    New-Item ".lotse-ca-trusted" -ItemType File | Out-Null
+if (-not (Test-Path ".quitly-ca-trusted")) {
+    Say "Einmalig: Zertifikat der lokalen Quitly-CA wird als vertrauenswuerdig eingetragen ..."
+    docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt (Join-Path $Root ".quitly-root.crt") *> $null
+    Import-Certificate -FilePath (Join-Path $Root ".quitly-root.crt") -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
+    New-Item ".quitly-ca-trusted" -ItemType File | Out-Null
 }
 
 # 6. Erster Benutzer
 $users = docker compose exec -T backend python -m app.cli list-users 2>$null
 if (-not $users) {
-    Say "Lege deinen Lotse-Benutzer an (Passwort mind. 4 Zeichen):"
+    Say "Lege deinen Quitly-Benutzer an (Passwort mind. 4 Zeichen):"
     $name = Read-Host "Benutzername"
     docker compose exec backend python -m app.cli create-user $name
 }
 
-Say "Lotse laeuft: https://$Domain"
+Say "Quitly laeuft: https://$Domain"
 Start-Process "https://$Domain"
-Write-Host "Beenden mit 'Lotse beenden.bat' oder: docker compose stop"
+Write-Host "Beenden mit 'Quitly beenden.bat' oder: docker compose stop"
 Start-Sleep 3

@@ -3,7 +3,7 @@
 Es werden ausschließlich feste Google-Endpunkte angesprochen (kein SSRF-Risiko).
 Benötigter Scope: gmail.modify (Metadaten lesen, in den Papierkorb verschieben).
 Endgültiges Löschen über die API würde den Vollzugriff-Scope https://mail.google.com/ erfordern –
-den fordert Lotse bewusst nicht an.
+den fordert Quitly bewusst nicht an.
 """
 from __future__ import annotations
 

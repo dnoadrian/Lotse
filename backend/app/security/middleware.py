@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse, Response
 
 from ..config import get_settings
 
-log = logging.getLogger("lotse.access")
+log = logging.getLogger("quitly.access")
 
 CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -43,7 +43,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             if origin is not None and origin != s.public_origin:
                 return self._finish(request, JSONResponse({"detail": "Ungültige Herkunft"}, status_code=403), start)
             # 2. Eigener Header erzwingt bei Cross-Site-Anfragen einen CORS-Preflight, den wir nie erlauben
-            if request.headers.get("x-lotse-request") != "1":
+            if request.headers.get("x-quitly-request") != "1":
                 return self._finish(request, JSONResponse({"detail": "Fehlender Anfrage-Header"}, status_code=403), start)
             # 3. Nur JSON annehmen
             ctype = request.headers.get("content-type", "")

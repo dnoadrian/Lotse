@@ -349,3 +349,12 @@ def test_no_plaintext_credentials_in_database(client, auth, db, monkeypatch):
     assert "Klartext" not in r.text
     dump = " ".join(str(v) for row in db.execute(text("SELECT * FROM mail_accounts")).all() for v in row)
     assert "Klartext-Passwort-1" not in dump
+
+
+def test_connection_tests_rate_limited(client, auth, monkeypatch):
+    from app.routers import accounts
+    calls = []
+    monkeypatch.setattr(accounts, "_test_imap", lambda *a: calls.append(a))
+    body = {"label": "x", "host": "mail.example.org", "port": 993, "username": "u", "password": "p"}
+    codes = [auth.post("/api/mail-accounts/imap", json=body).status_code for _ in range(11)]
+    assert codes[:10] == [201] * 10 and codes[10] == 429 and len(calls) == 10

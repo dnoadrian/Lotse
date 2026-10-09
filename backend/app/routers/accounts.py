@@ -18,6 +18,7 @@ from ..jdm.catalog import get_catalog
 from ..mail import gmail_client, imap_client
 from ..mail.accounts import credentials, store_credentials
 from ..models import MailAccount, OAuthState, ScanJob
+from ..security import ratelimit
 from ..security.crypto import decrypt, encrypt, new_token, token_hash
 from ..security.netguard import HostNotAllowed, normalize_host
 from ..security.sessions import Auth, _load_session, require_auth
@@ -68,6 +69,13 @@ def account_out(acc: MailAccount) -> dict:
     }
 
 
+def _limit_connection_tests(db: Session, auth: Auth) -> None:
+    """Verbindungstests begrenzen (kein Missbrauch als Passwort-Rater oder Port-Scanner gegen fremde Server)."""
+    ok, retry = ratelimit.hit(db, f"imap-test:{auth.user.id}", 10, timedelta(minutes=5))
+    if not ok:
+        raise HTTPException(429, "Zu viele Verbindungsversuche. Bitte kurz warten.", headers={"Retry-After": str(retry)})
+
+
 def _test_imap(host: str, port: int, username: str, password: str) -> None:
     try:
         with imap_client.connect(host, port, username, password) as c:
@@ -101,6 +109,7 @@ def add_imap(body: ImapIn, request: Request, auth: Auth = Depends(require_auth),
         host = normalize_host(body.host)
     except HostNotAllowed as exc:
         raise HTTPException(400, str(exc)) from exc
+    _limit_connection_tests(db, auth)
     _test_imap(host, body.port, body.username, body.password)
     acc = MailAccount(user_id=auth.user.id, provider="imap", label=body.label.strip(), email_address=body.username.strip()[:254],
                       imap_host=host, imap_port=body.port)
@@ -125,6 +134,7 @@ def update_imap(account_id: int, body: ImapUpdate, request: Request, auth: Auth 
     port = body.port or acc.imap_port
     username = body.username or creds["username"]
     password = body.password or creds["secret"]
+    _limit_connection_tests(db, auth)
     _test_imap(host, port, username, password)
     acc.imap_host, acc.imap_port = host, port
     if body.label:
@@ -140,6 +150,7 @@ def update_imap(account_id: int, body: ImapUpdate, request: Request, auth: Auth 
 @router.post("/api/mail-accounts/{account_id}/test")
 def test_account(account_id: int, auth: Auth = Depends(require_auth), db: Session = Depends(get_db)):
     acc = owned_account(db, auth, account_id)
+    _limit_connection_tests(db, auth)
     creds = credentials(acc)
     try:
         if acc.provider == "imap":

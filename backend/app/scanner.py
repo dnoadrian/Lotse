@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections import defaultdict
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -44,6 +44,7 @@ class _Agg:
     jdm_name: str | None
     domains: set[str] = field(default_factory=set)
     senders: set[str] = field(default_factory=set)
+    names: Counter = field(default_factory=Counter)
     messages: int = 0
     evidence: list[dict] = field(default_factory=list)
     first: datetime | None = None
@@ -185,11 +186,21 @@ def _ingest(aggs: dict[str, _Agg], catalog, h, folder: str, uidvalidity: str, re
     if c is None:
         return 0
     _touch(agg, h.date)
+    if _usable_name(h.from_name):
+        agg.names[h.from_name] += 1
     agg.evidence.append({
         "folder": folder, "uidvalidity": uidvalidity, "msg_ref": ref, "category": c.category,
         "score": c.score, "sender_domain": h.from_domain, "received_at": h.date,
     })
     return 1
+
+
+_GENERIC_NAMES = {"noreply", "no-reply", "no reply", "info", "support", "team", "service", "newsletter", "admin"}
+
+
+def _usable_name(name: str) -> bool:
+    n = name.strip().lower()
+    return 2 <= len(n) <= 60 and "@" not in n and n not in _GENERIC_NAMES and not n.startswith(("re:", "fwd:"))
 
 
 def _is_service(evidence: list[dict]) -> bool:
@@ -219,6 +230,9 @@ def _merge(user_id: int, account_id: int, aggs: dict[str, _Agg]) -> None:
                 db.add(svc)
                 db.flush()
                 existing[key] = svc
+            if not svc.jdm_name and agg.names:
+                # Ohne JDM-Eintrag: häufigster Absendername ("Notion" statt "Makenotion")
+                svc.display_name = agg.names.most_common(1)[0][0][:120]
             svc.domains = sorted(set(svc.domains or []) | agg.domains)
             src = dict(svc.sources or {})
             src[str(account_id)] = {"messages": agg.messages, "signals": len(agg.evidence), "senders": len(agg.senders)}

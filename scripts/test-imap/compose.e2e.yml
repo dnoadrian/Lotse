@@ -1,0 +1,12 @@
+# Nur für lokale Ende-zu-Ende-Tests mit dem Dovecot-Testserver (scripts/test-imap/start.sh).
+# Aufruf: docker compose -f docker-compose.yml -f scripts/test-imap/compose.e2e.yml up -d
+services:
+  backend:
+    extra_hosts:
+      - "imap.lotse.test:host-gateway"
+    environment:
+      LOTSE_IMAP_ALLOWED_HOSTS: imap.lotse.test
+      LOTSE_IMAP_ALLOWED_PORTS: "993,10993"
+      LOTSE_IMAP_CA_FILE: /certs/test-ca.pem
+    volumes:
+      - /tmp/lotse-test-imap/ca.pem:/certs/test-ca.pem:ro

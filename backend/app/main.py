@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import db as dbmod
@@ -26,7 +27,11 @@ def create_app() -> FastAPI:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     engine = dbmod.init_engine(s.database_url)
-    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            # Mehrere Worker starten gleichzeitig: Schema-Anlage serialisieren
+            conn.execute(text("SELECT pg_advisory_xact_lock(724501)"))
+        Base.metadata.create_all(conn)
     get_catalog()  # früh laden: defekte Daten sollen den Start verhindern
 
     docs = None if s.is_production else "/api/docs"

@@ -28,7 +28,24 @@ Selbst gehostet auf deinem eigenen Linux-Server mit Docker Compose und HTTPS.
   Details und Bedrohungsanalyse: [docs/SECURITY.md](docs/SECURITY.md).
 - **Design:** helles (Standard) und dunkles Design, responsiv bis Smartphone-Breite.
 
-## Schnellstart
+## Start per Doppelklick (lokal)
+
+1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) installieren und einmal öffnen.
+2. Dieses Projekt herunterladen (grüner Knopf „Code“ → „Download ZIP“) und entpacken.
+3. Doppelklick auf
+   - **Windows:** `Lotse starten.bat`
+   - **macOS:** `Lotse starten.command` (beim ersten Mal: Rechtsklick → „Öffnen“)
+   - **Linux:** `lotse-starten.sh`
+
+Beim ersten Start richtet die Datei alles ein: Zufallsschlüssel, `lotse.at` zeigt auf deinen Rechner,
+die lokale HTTPS-Zertifizierungsstelle wird vertraut (dafür fragt das System einmal nach deinem Passwort)
+und du legst deinen Benutzer an. Danach öffnet sich `https://lotse.at` im Browser.
+Beenden mit `Lotse beenden.bat` bzw. `Lotse beenden.command`.
+
+Hinweis: `lotse.at` zeigt dann **nur auf deinem Rechner** auf Lotse (Eintrag in der hosts-Datei).
+Andere Namen gehen auch: Umgebungsvariable `LOTSE_LOCAL_DOMAIN` vor dem Start setzen.
+
+## Schnellstart (Server)
 
 ```bash
 ./scripts/generate-env.sh lotse.example.org admin@example.org   # erzeugt .env mit Zufallsschlüsseln

@@ -94,16 +94,28 @@ def test_endpoints_require_login(client, method, url):
         assert "detail" in r.json()
 
 
+def _all_routes(routes, prefix=""):
+    """Auch eingebundene Router durchlaufen (neuere FastAPI-Versionen kapseln sie)."""
+    for route in routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            yield from _all_routes(inner.routes, prefix + route.include_context.prefix)
+        elif hasattr(route, "path"):
+            yield prefix + route.path, route
+
+
 def test_all_api_routes_are_covered(app):
     """Jede neue Route muss bewusst öffentlich sein oder Anmeldung verlangen."""
     public = {"/api/health", "/api/auth/login", "/api/auth/totp", "/api/auth/logout", "/api/auth/session",
-              "/api/oauth/google/callback"}
-    for route in app.routes:
-        path = getattr(route, "path", "")
+              "/api/oauth/google/callback", "/api/setup", "/api/setup/status"}
+    checked = 0
+    for path, route in _all_routes(app.routes):
         if not path.startswith("/api") or path in public or path.startswith("/api/docs") or path == "/api/openapi.json":
             continue
         deps = [d.call.__name__ for d in route.dependant.dependencies]
         assert "require_auth" in deps, f"{path} ist nicht geschützt"
+        checked += 1
+    assert checked >= 25  # Schutz davor, dass der Test wieder ins Leere läuft
 
 
 def test_login_generic_error_and_no_user_enumeration(client, user):
@@ -363,3 +375,52 @@ def test_connection_tests_rate_limited(client, auth, monkeypatch):
     body = {"label": "x", "host": "mail.example.org", "port": 993, "username": "u", "password": "p"}
     codes = [auth.post("/api/mail-accounts/imap", json=body).status_code for _ in range(11)]
     assert codes[:10] == [201] * 10 and codes[10] == 429 and len(calls) == 10
+
+
+# ---------------------------------------------------------------- Ersteinrichtung (Render)
+
+def test_setup_only_with_token_and_only_once(settings_env, monkeypatch):
+    from app import scanner
+    from app.main import create_app
+    settings_env(setup_token="einmal-token-1234567890")
+    monkeypatch.setattr(scanner, "submit", scanner.run)
+    with TestClient(create_app()) as c:
+        assert c.get("/api/setup/status").json() == {"needed": True}
+        bad = c.post("/api/setup", json={"token": "falsch", "username": "adrian", "password": PASSWORD}, headers=H)
+        assert bad.status_code == 403
+        weak = c.post("/api/setup", json={"token": "einmal-token-1234567890", "username": "adrian", "password": "kurz"},
+                      headers=H)
+        assert weak.status_code == 400
+        ok = c.post("/api/setup", json={"token": "einmal-token-1234567890", "username": "Adrian", "password": PASSWORD},
+                    headers=H)
+        assert ok.status_code == 200
+        assert c.get("/api/setup/status").json() == {"needed": False}
+        again = c.post("/api/setup", json={"token": "einmal-token-1234567890", "username": "mallory",
+                                           "password": PASSWORD}, headers=H)
+        assert again.status_code == 404
+        login(c, "adrian")
+
+
+def test_setup_disabled_without_token(client):
+    assert client.get("/api/setup/status").json() == {"needed": False}
+    r = client.post("/api/setup", json={"token": "x", "username": "adrian", "password": PASSWORD}, headers=H)
+    assert r.status_code == 404
+
+
+def test_frontend_served_with_spa_fallback(settings_env, monkeypatch, tmp_path):
+    from app import scanner
+    from app.main import create_app
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<!doctype html><title>Lotse</title>")
+    (tmp_path / "assets" / "app.js").write_text("console.log(1)")
+    (tmp_path.parent / "geheim.txt").write_text("geheim")
+    settings_env(static_dir=str(tmp_path))
+    monkeypatch.setattr(scanner, "submit", scanner.run)
+    with TestClient(create_app()) as c:
+        assert "Lotse" in c.get("/konten").text
+        r = c.get("/assets/app.js")
+        assert r.status_code == 200 and "immutable" in r.headers["cache-control"]
+        assert "content-security-policy" in r.headers
+        assert "geheim" not in c.get("/../geheim.txt").text
+        assert "geheim" not in c.get("/%2e%2e/geheim.txt").text
+        assert c.get("/api/gibt-es-nicht").status_code == 404

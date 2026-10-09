@@ -33,7 +33,11 @@ def h(subject, sender="noreply@github.com", unsub=False):
     ("Your account has been deleted", "deletion"),
     ("Dein Konto wurde gelöscht", "deletion"),
     ("Bestätigung der Kontolöschung", "deletion"),
-    ("Passwort zurücksetzen", "notice"),
+    ("Passwort zurücksetzen", "security"),
+    ("Neue Anmeldung bei deinem Konto", "security"),
+    ("Dein Abo wurde verlängert", "subscription"),
+    ("Ihre Bestellung #123456 wurde versendet", "order"),
+    ("Ihre Rechnung für März", "order"),
 ])
 def test_classifier_categories(subject, category):
     c = classify(h(subject))
@@ -41,14 +45,36 @@ def test_classifier_categories(subject, category):
 
 
 @pytest.mark.parametrize("subject", [
-    "Ihre Rechnung für März",
     "Unser Newsletter im Oktober",
     "Re: Treffen am Freitag",
     "50 % Rabatt nur heute",
     "",
 ])
-def test_classifier_ignores_unrelated(subject):
-    assert classify(h(subject)) is None
+def test_unrelated_mail_is_only_weak_contact_signal(subject):
+    c = classify(h(subject))
+    assert c.category == "contact" and c.score <= 0.18
+
+
+def test_every_mail_counts_but_personal_senders_weaker():
+    auto = classify(h("Hallo", sender="noreply@shop.example"))
+    person = classify(h("Hallo", sender="maria@firma.example"))
+    assert auto.category == person.category == "contact" and person.score < auto.score
+
+
+def test_body_text_detects_account_when_subject_does_not():
+    """Beispiel Render: Betreff ohne Hinweis, im Text 'Thanks for joining us!'."""
+    mail = from_mapping({"from": "Stephen from Render <hello@render.com>", "subject": "Ready to ship with Render?",
+                         "list-unsubscribe": "<mailto:u@render.com>"})
+    assert classify(mail).category == "newsletter"
+    c = classify(mail, "Hi Adrian, Thanks for joining us! Let's get you up and running quickly. Unsubscribe")
+    assert c.category == "welcome" and c.score >= 0.45
+    assert "Text: Willkommen" in c.reasons and "Text: Newsletter" in c.reasons
+
+
+def test_subject_match_beats_body_match():
+    subj = classify(h("Welcome to Example"))
+    body = classify(h("Hallo"), "Welcome to Example")
+    assert subj.score > body.score
 
 
 def test_newsletter_welcome_penalized():
@@ -120,3 +146,20 @@ def test_identify_unknown_domain_has_no_jdm():
 def test_identify_ignores_freemail():
     assert identify("gmail.com", get_catalog()) is None
     assert identify("gmx.at", get_catalog()) is None
+
+
+@pytest.mark.parametrize("host,name,expected", [
+    ("makenotion.com", "Notion Team", "Notion"),          # Domain nicht im Katalog, Absendername schon
+    ("makenotion.com", "", "Notion"),                     # Präfix "make" + Markenname
+    ("render.com", "Stephen from Render", "Render"),      # direkte Domain
+    ("mail.render.com", "", "Render"),                    # Subdomain
+    ("e.udemy.com", "Udemy", "Udemy"),
+])
+def test_jdm_matching_by_domain_and_brand(host, name, expected):
+    ident = identify(host, get_catalog(), name)
+    assert ident.jdm_name == expected
+
+
+def test_brand_matching_does_not_guess_short_or_unknown_names():
+    assert identify("box-beispiel.at", get_catalog(), "Box").jdm_name is None
+    assert identify("baeckerei-muster.at", get_catalog(), "Bäckerei Muster").jdm_name is None

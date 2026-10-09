@@ -26,6 +26,9 @@ export const getSession = () => api.get<SessionInfo>("/api/auth/session", { noAu
 export const login = (username: string, password: string) =>
   api.post<LoginResponse>("/api/auth/login", { username, password }, { noAuthRedirect: true });
 export const submitTotp = (code: string) => api.post<CsrfResponse>("/api/auth/totp", { code }, { noAuthRedirect: true });
+export const getSetupStatus = () => api.get<{ needed: boolean }>("/api/setup/status", { noAuthRedirect: true });
+export const completeSetup = (token: string, username: string, password: string) =>
+  api.post<OkResponse>("/api/setup", { token, username, password }, { noAuthRedirect: true });
 export const logout = () => api.post<OkResponse>("/api/auth/logout", undefined, { noAuthRedirect: true });
 
 // Sicherheit

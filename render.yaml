@@ -1,0 +1,49 @@
+# Render Blueprint: legt Web-Dienst und PostgreSQL-Datenbank an.
+# Render-Dashboard → New → Blueprint → dieses Repository wählen → Apply.
+services:
+  - type: web
+    name: lotse
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: LOTSE_ENVIRONMENT
+        value: production
+      - key: LOTSE_COOKIE_SECURE
+        value: "true"
+      # Render-Proxy setzt X-Forwarded-For; der letzte Eintrag ist die Client-IP
+      - key: LOTSE_TRUSTED_PROXIES
+        value: "1"
+      - key: LOTSE_DATABASE_URL
+        fromDatabase:
+          name: lotse-db
+          property: connectionString
+      # Zufallswerte, von Render erzeugt (base64, 256 Bit)
+      - key: LOTSE_SECRET_KEY
+        generateValue: true
+      - key: LOTSE_ENCRYPTION_KEY
+        generateValue: true
+      # Einmal-Token für die Ersteinrichtung im Browser (Wert im Dashboard unter Environment ablesen)
+      - key: LOTSE_SETUP_TOKEN
+        generateValue: true
+      # Optional: eigene Domain, sonst automatisch https://<name>.onrender.com
+      - key: LOTSE_PUBLIC_URL
+        sync: false
+      # Optional: Gmail (siehe docs/GMAIL.md)
+      - key: LOTSE_GOOGLE_CLIENT_ID
+        sync: false
+      - key: LOTSE_GOOGLE_CLIENT_SECRET
+        sync: false
+
+databases:
+  - name: lotse-db
+    plan: free
+    region: frankfurt
+    databaseName: lotse
+    user: lotse
+    # Kein Zugriff aus dem Internet, nur aus Render-Diensten
+    ipAllowList: []

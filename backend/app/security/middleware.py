@@ -59,6 +59,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     def _finish(self, request: Request, response: Response, start: float) -> Response:
         for k, v in SECURITY_HEADERS.items():
             response.headers.setdefault(k, v)
+        if get_settings().is_production:
+            response.headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
             response.headers["Pragma"] = "no-cache"

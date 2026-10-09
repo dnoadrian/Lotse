@@ -1,8 +1,13 @@
 """Robustes, defensives Parsen von Kopfzeilen. Es werden nie Bodies oder Anhänge verarbeitet."""
 from __future__ import annotations
 
+import base64
+import binascii
+import codecs
 import email
 import email.policy
+import html
+import quopri
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -101,3 +106,73 @@ def parse_raw(raw: bytes) -> MailHeaders:
         if v is not None:
             h[key] = str(v)[:2000]
     return from_mapping(h)
+
+
+# ------------------------------------------------------------------ Text-Anfang (nur im Speicher)
+
+_TAGS = re.compile(r"<(script|style|head)\b.*?</\1\s*>|<[^>]{0,2000}>", re.IGNORECASE | re.DOTALL)
+TEXT_LIMIT = 4000
+
+
+def _charset(name: str | None) -> str:
+    try:
+        return codecs.lookup(name or "utf-8").name
+    except LookupError:
+        return "utf-8"
+
+
+def _decode_part(part) -> str:
+    raw = part.get_payload(decode=False)
+    if not isinstance(raw, str):
+        return ""
+    cte = (part.get("content-transfer-encoding") or "").strip().lower()
+    data = raw.encode("latin-1", "replace")
+    if cte == "base64":
+        cleaned = re.sub(rb"[^A-Za-z0-9+/=]", b"", data)
+        cleaned = cleaned[: len(cleaned) // 4 * 4]  # abgeschnittene Daten tolerieren
+        try:
+            data = base64.b64decode(cleaned)
+        except (binascii.Error, ValueError):
+            return ""
+    elif cte == "quoted-printable":
+        data = quopri.decodestring(data)
+    text = data.decode(_charset(part.get_content_charset()), "replace")
+    if part.get_content_type() == "text/html":
+        text = html.unescape(_TAGS.sub(" ", text))
+    return text
+
+
+def body_text(raw_headers: bytes, raw_body: bytes, limit: int = TEXT_LIMIT) -> str:
+    """Liest den Anfang des Textes einer Mail für die Erkennung (nie gespeichert, nie geloggt).
+
+    Es werden nur text/plain- und text/html-Teile betrachtet; Anhänge werden übersprungen,
+    HTML wird nicht gerendert, sondern zu Text reduziert.
+    """
+    if not raw_body:
+        return ""
+    try:
+        msg = email.message_from_bytes(raw_headers[:16384] + b"\r\n" + raw_body[:16384], policy=email.policy.compat32)
+    except Exception:
+        return ""
+    out: list[str] = []
+    size = 0
+    try:
+        parts = list(msg.walk())
+    except Exception:
+        parts = [msg]
+    for part in parts[:20]:
+        if part.is_multipart():
+            continue
+        if part.get_content_type() not in ("text/plain", "text/html"):
+            continue
+        if (part.get("content-disposition") or "").lower().startswith("attachment"):
+            continue
+        try:
+            chunk = _decode_part(part)
+        except Exception:
+            continue
+        out.append(chunk)
+        size += len(chunk)
+        if size >= limit:
+            break
+    return clean_text(" ".join(out), limit)

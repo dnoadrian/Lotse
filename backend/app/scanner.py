@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 
 from . import db as dbmod
 from .detection.classifier import classify, combine
-from .detection.headers import from_mapping, parse_raw
+from .detection.headers import body_text, from_mapping, parse_raw
 from .detection.resolver import identify
 from .jdm.catalog import get_catalog
 from .mail import gmail_client, imap_client
@@ -24,12 +24,7 @@ log = logging.getLogger("lotse.scan")
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="scan")
 _lock = threading.Lock()
 
-# Gmail: serverseitiger Vorfilter, damit nicht jede Nachricht einzeln abgerufen werden muss
-GMAIL_QUERY = (
-    "subject:(welcome OR willkommen OR bienvenue OR bienvenido OR confirm OR bestätigen OR bestätige OR verify "
-    "OR verifizieren OR activate OR aktivieren OR registration OR registrierung OR registriert OR \"sign up\" "
-    "OR account OR konto OR deleted OR gelöscht OR \"thanks for joining\" OR \"thank you for signing up\")"
-)
+# Gmail: neueste Nachrichten (jede einzeln per API); Text-Anfang kommt aus dem "snippet"
 GMAIL_LIMIT = 5000
 SKIP_SPECIAL = {"trash", "junk"}
 
@@ -128,15 +123,16 @@ def run(job_id: int) -> None:
                     if not uids:
                         continue
                     imap_client.select(client, f, readonly=True)
-                    for uid, raw in imap_client.fetch_headers(client, uids):
+                    for uid, head, body in imap_client.fetch_for_scan(client, uids):
                         seen += 1
-                        h = parse_raw(raw)
-                        signals += _ingest(aggs, catalog, h, f.raw, uidvalidity, str(uid))
+                        h = parse_raw(head)
+                        # Text nur im Speicher auswerten – wird nicht gespeichert
+                        signals += _ingest(aggs, catalog, h, f.raw, uidvalidity, str(uid), body_text(head, body))
                         if seen % 250 == 0:
                             _update(job_id, messages_seen=seen, signals_found=signals, progress=0.08 + 0.8 * seen / total)
         else:
             with gmail_client.GmailClient(creds["secret"]) as g:
-                q = GMAIL_QUERY + (f" newer_than:{since_days}d" if since_days else "")
+                q = f"newer_than:{since_days}d" if since_days else None
                 ids = list(g.iter_message_ids(query=q, limit=GMAIL_LIMIT))
                 total = len(ids) or 1
                 _update(job_id, messages_total=len(ids), step="classify", progress=0.08)
@@ -146,7 +142,7 @@ def run(job_id: int) -> None:
                     h = from_mapping(m.headers)
                     if h.date is None and m.internal_date_ms:
                         h.date = datetime.fromtimestamp(m.internal_date_ms / 1000, tz=timezone.utc)
-                    signals += _ingest(aggs, catalog, h, "ALL", "", m.id)
+                    signals += _ingest(aggs, catalog, h, "ALL", "", m.id, m.snippet)
                     if seen % 50 == 0:
                         _update(job_id, messages_seen=seen, signals_found=signals, progress=0.08 + 0.8 * seen / total)
     except Cancelled:
@@ -172,8 +168,8 @@ def run(job_id: int) -> None:
     _finish(job_id, "done")
 
 
-def _ingest(aggs: dict[str, _Agg], catalog, h, folder: str, uidvalidity: str, ref: str) -> int:
-    ident = identify(h.from_domain, catalog)
+def _ingest(aggs: dict[str, _Agg], catalog, h, folder: str, uidvalidity: str, ref: str, text: str = "") -> int:
+    ident = identify(h.from_domain, catalog, h.from_name)
     if ident is None:
         return 0
     agg = aggs.get(ident.key)
@@ -182,7 +178,7 @@ def _ingest(aggs: dict[str, _Agg], catalog, h, folder: str, uidvalidity: str, re
     agg.domains.add(ident.domain)
     agg.senders.add(h.from_addr)
     agg.messages += 1
-    c = classify(h)
+    c = classify(h, text)
     if c is None:
         return 0
     _touch(agg, h.date)
@@ -190,9 +186,9 @@ def _ingest(aggs: dict[str, _Agg], catalog, h, folder: str, uidvalidity: str, re
         agg.names[h.from_name] += 1
     agg.evidence.append({
         "folder": folder, "uidvalidity": uidvalidity, "msg_ref": ref, "category": c.category,
-        "score": c.score, "sender_domain": h.from_domain, "received_at": h.date,
+        "score": c.score, "sender_domain": h.from_domain, "received_at": h.date, "reasons": list(c.reasons),
     })
-    return 1
+    return 1 if c.category not in WEAK_CATEGORIES else 0
 
 
 _GENERIC_NAMES = {"noreply", "no-reply", "no reply", "info", "support", "team", "service", "newsletter", "admin"}
@@ -203,9 +199,18 @@ def _usable_name(name: str) -> bool:
     return 2 <= len(n) <= 60 and "@" not in n and n not in _GENERIC_NAMES and not n.startswith(("re:", "fwd:"))
 
 
-def _is_service(evidence: list[dict]) -> bool:
-    strong = [e for e in evidence if e["category"] != "notice"]
-    return bool(strong) or len(evidence) >= 2
+WEAK_CATEGORIES = ("contact", "newsletter")
+MAX_STRONG_EVIDENCE = 300
+MAX_WEAK_EVIDENCE = 30
+
+
+def _keep_evidence(evidence: list[dict]) -> list[dict]:
+    """Alle aussagekräftigen Belege behalten, schwache (nur Mail/Newsletter) auf die neuesten begrenzen."""
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    by_date = sorted(evidence, key=lambda e: e["received_at"] or epoch, reverse=True)
+    strong = [e for e in by_date if e["category"] not in WEAK_CATEGORIES][:MAX_STRONG_EVIDENCE]
+    weak = [e for e in by_date if e["category"] in WEAK_CATEGORIES][:MAX_WEAK_EVIDENCE]
+    return strong + weak
 
 
 def _merge(user_id: int, account_id: int, aggs: dict[str, _Agg]) -> None:
@@ -221,8 +226,6 @@ def _merge(user_id: int, account_id: int, aggs: dict[str, _Agg]) -> None:
         db.flush()
 
         for key, agg in aggs.items():
-            if not _is_service(agg.evidence):
-                continue
             svc = existing.get(key)
             if svc is None:
                 svc = Service(user_id=user_id, key=key, display_name=agg.display_name, jdm_name=agg.jdm_name,
@@ -237,7 +240,7 @@ def _merge(user_id: int, account_id: int, aggs: dict[str, _Agg]) -> None:
             src = dict(svc.sources or {})
             src[str(account_id)] = {"messages": agg.messages, "signals": len(agg.evidence), "senders": len(agg.senders)}
             svc.sources = src
-            for e in agg.evidence:
+            for e in _keep_evidence(agg.evidence):
                 db.add(Evidence(user_id=user_id, account_id=account_id, service_id=svc.id, **e))
             if agg.first and (svc.first_seen is None or agg.first < _aware(svc.first_seen)):
                 svc.first_seen = agg.first
@@ -273,7 +276,8 @@ def recompute(db, user_id: int) -> None:
         # Stärkste Hinweise je Kategorie kombinieren (gleiche Kategorie zählt nur begrenzt mehrfach)
         best: dict[str, list[float]] = defaultdict(list)
         for ev in sorted(evs, key=lambda x: -x.score):
-            if len(best[ev.category]) < 2:
+            limit = 1 if ev.category in WEAK_CATEGORIES else 2
+            if len(best[ev.category]) < limit:
                 best[ev.category].append(ev.score * (1.0 if not best[ev.category] else 0.5))
         svc.confidence = combine([s for v in best.values() for s in v]) if evs else 0.0
         deletions = [ev for ev in evs if ev.category == "deletion"]

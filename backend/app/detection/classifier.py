@@ -1,14 +1,21 @@
-"""Regelbasierte Erkennung von Konto-Mails anhand von Betreff und Absender.
+"""Regelbasierte Erkennung von Konto-Hinweisen in jeder einzelnen Mail.
 
-Kategorien:
-- welcome       Willkommensnachricht nach Registrierung
-- verification  E-Mail-Adresse bestätigen / Konto aktivieren
-- registration  Registrierung / Anmeldung abgeschlossen
-- deletion      Konto gelöscht / geschlossen
-- notice        Konto-Hinweis (Passwort, neue Anmeldung) – schwaches Signal
+Geprüft werden Absender, Betreff und – falls vorhanden – der Anfang des Textes.
+Jede Mail eines Dienstes ist mindestens ein schwacher Hinweis ("Mail erhalten"): Wer von einem
+Dienst Mails bekommt, hat dort möglicherweise ein Konto.
 
-Die Regeln sind absichtlich konservativ: lieber ein Konto übersehen als Newsletter
-fälschlich als Konto zu melden. Die Qualität wird als Wahrscheinlichkeit 0–1 ausgegeben.
+Kategorien (Basiswert = Wahrscheinlichkeit, dass ein Konto existiert, wenn der Betreff passt):
+- deletion      0.75  Konto gelöscht / geschlossen
+- verification  0.62  E-Mail-Adresse bestätigen / Konto aktivieren
+- welcome       0.60  Willkommensnachricht
+- registration  0.58  Registrierung / Konto erstellt
+- security      0.55  Passwort zurücksetzen, neue Anmeldung, Einmalcode
+- subscription  0.50  Abo, Testphase, Zahlung
+- order         0.45  Bestellung, Rechnung, Buchung
+- account       0.40  allgemeiner Konto-Hinweis ("dein Konto")
+- newsletter    0.28  Newsletter (Abmelde-Link)
+- contact       0.10–0.18  nur Mail erhalten
+Treffer nur im Text zählen 0.1 weniger als im Betreff.
 """
 from __future__ import annotations
 
@@ -57,11 +64,38 @@ RULES: list[tuple[str, float, re.Pattern]] = [
         r"\bdu hast dich (erfolgreich )?(registriert|angemeldet)\b",
         r"\bihre registrierung\b",
     )),
-    ("notice", 0.32, _P(
-        r"\b(password reset|reset your password|passwort zurücksetzen|passwort vergessen|neues passwort)\b",
-        r"\b(new (sign-?in|login)|neue anmeldung|anmeldung von einem neuen gerät|security alert|sicherheitswarnung)\b",
-        r"\b(your account|dein konto|ihr konto|dein account|ihr account)\b",
-        r"\b(verification code|bestätigungscode|sicherheitscode|anmeldecode|login code)\b",
+    ("security", 0.55, _P(
+        r"\b(password reset|reset your password|passwort zurücksetzen|passwort vergessen|neues passwort|change your password)\b",
+        r"\b(new (sign-?in|login)|neue anmeldung|anmeldung von einem neuen gerät|security alert|sicherheitswarnung|sign-?in attempt)\b",
+        r"\b(verification code|bestätigungscode|sicherheitscode|anmeldecode|login code|einmalcode|one-?time (code|password)|2fa|two-factor|zwei-faktor)\b",
+        r"\b(magic link|login link|anmeldelink)\b",
+    )),
+    ("subscription", 0.5, _P(
+        r"\b(your|dein|ihr) (subscription|abo|abonnement|plan|membership|mitgliedschaft)\b",
+        r"\b(free trial|trial (ends|expires|started)|testphase|probezeitraum|probeabo)\b",
+        r"\b(subscription|abonnement|abo|mitgliedschaft) (renewed|verlängert|bestätigt|confirmed|cancel+ed|gekündigt|ends|endet)\b",
+        r"\b(payment (failed|received)|zahlung (fehlgeschlagen|erhalten)|billing)\b",
+    )),
+    ("order", 0.45, _P(
+        r"\b(order|bestellung|auftrag|commande|pedido|ordine)\b.{0,25}\b(confirm\w*|bestätig\w*|received|eingegangen|shipped|versandt|versendet|unterwegs|#?\d{4,})",
+        r"\b(your|deine|ihre) (order|bestellung|rechnung|invoice|receipt|quittung|buchung|booking|reservation|reservierung)\b",
+        r"\b(bestellnummer|order number|order no\.?|rechnungsnummer|invoice number|buchungsnummer)\b",
+        r"\b(receipt|quittung|kaufbeleg|zahlungsbestätigung|payment confirmation)\b",
+    )),
+    ("account", 0.4, _P(
+        r"\b(your account|dein konto|ihr konto|dein account|ihr account|kundenkonto|benutzerkonto|my account|mein konto)\b",
+        r"\b(log ?in|sign ?in|anmelden|einloggen) (to|bei|in) (your|dein|ihr)\b",
+        r"\b(profile|profil) (updated|aktualisiert|completed|vervollständig\w*)\b",
+    )),
+]
+
+# Nur im Text gesuchte Hinweise (zusätzlich zu den obigen Regeln)
+BODY_ONLY: list[tuple[str, float, re.Pattern]] = [
+    ("newsletter", 0.28, _P(
+        r"\b(unsubscribe|abmelden vom newsletter|newsletter abbestellen|abbestellen|manage (your )?(email )?preferences|e-mail-einstellungen|désabonner|darse de baja)\b",
+        r"\byou('re| are) receiving this (email|message) because\b",
+        r"\bsie erhalten diese (e-mail|nachricht)\b",
+        r"\bdu erhältst diese (e-mail|nachricht)\b",
     )),
 ]
 
@@ -79,32 +113,69 @@ FREEMAIL = {
 }
 
 
+LABELS = {
+    "deletion": "Kontolöschung", "verification": "Bestätigung", "welcome": "Willkommen",
+    "registration": "Registrierung", "security": "Sicherheit/Anmeldung", "subscription": "Abo/Zahlung",
+    "order": "Bestellung/Rechnung", "account": "Konto-Hinweis", "newsletter": "Newsletter",
+    "contact": "Mail erhalten", "notice": "Hinweis",
+}
+# Kategorien, die eine Registrierung/Kontoänderung belegen (für "nur Registrierungs-Mails löschen")
+REGISTRATION_CATEGORIES = ("welcome", "verification", "registration", "deletion")
+BODY_PENALTY = 0.1
+
+
 @dataclass(frozen=True)
 class Classification:
     category: str
     score: float
+    reasons: tuple[str, ...] = ()
 
 
-def classify(h: MailHeaders) -> Classification | None:
-    """Gibt die stärkste Kategorie zurück oder None, wenn die Mail kein Konto-Signal trägt."""
-    if not h.from_domain or not h.subject:
+def _adjust(category: str, base: float, h: MailHeaders, automated: bool) -> float:
+    score = base
+    if automated and category not in ("contact", "newsletter"):
+        score += 0.06
+    if h.auto_submitted:
+        score += 0.03
+    if h.list_unsubscribe and category in ("welcome", "account"):
+        # Newsletter-Kennzeichen: Willkommens-Mails von Newslettern sind häufig keine Konten
+        score -= 0.06
+    return max(0.05, min(score, 0.95))
+
+
+def is_automated(h: MailHeaders) -> bool:
+    local = h.from_addr.split("@", 1)[0]
+    return bool(_ACCOUNT_SENDER.match(local)) or h.auto_submitted
+
+
+def classify(h: MailHeaders, text: str = "") -> Classification | None:
+    """Bewertet eine einzelne Mail. None nur, wenn kein Absender erkennbar ist."""
+    if not h.from_domain:
         return None
-    best: Classification | None = None
+    automated = is_automated(h)
+    hits: list[tuple[float, str, str]] = []  # (score, category, reason)
     for category, base, pattern in RULES:
-        if pattern.search(h.subject):
-            score = base
-            local = h.from_addr.split("@", 1)[0]
-            if _ACCOUNT_SENDER.match(local):
-                score += 0.08
-            if h.auto_submitted:
-                score += 0.04
-            if h.list_unsubscribe and category in ("welcome", "notice"):
-                # Newsletter-Kennzeichen: Willkommens-Mails von Newslettern sind häufig keine Konten
-                score -= 0.12
-            score = max(0.05, min(score, 0.95))
-            if best is None or score > best.score:
-                best = Classification(category, round(score, 3))
-    return best
+        if h.subject and pattern.search(h.subject):
+            hits.append((_adjust(category, base, h, automated), category, f"Betreff: {LABELS[category]}"))
+        elif text and pattern.search(text):
+            hits.append((_adjust(category, base - BODY_PENALTY, h, automated), category, f"Text: {LABELS[category]}"))
+    for category, base, pattern in BODY_ONLY:
+        if text and pattern.search(text):
+            hits.append((base, category, f"Text: {LABELS[category]}"))
+    if h.list_unsubscribe and not any(c == "newsletter" for _, c, _ in hits):
+        hits.append((0.28, "newsletter", "Newsletter-Kennzeichen (Abmelde-Link)"))
+    contact = 0.18 if automated else 0.1
+    hits.append((contact, "contact", "Mail von diesem Absender"))
+
+    hits.sort(key=lambda x: -x[0])
+    best_score, best_cat, _ = hits[0]
+    reasons = []
+    for _, _, reason in hits:
+        if reason not in reasons:
+            reasons.append(reason)
+    if automated:
+        reasons.append("Absender: automatisiert")
+    return Classification(best_cat, round(best_score, 3), tuple(reasons[:6]))
 
 
 def combine(scores: list[float]) -> float:

@@ -29,12 +29,13 @@ class ServiceIdentity:
     domain: str
 
 
-def identify(host: str, catalog: Catalog) -> ServiceIdentity | None:
+def identify(host: str, catalog: Catalog, display_name: str = "") -> ServiceIdentity | None:
     host = (host or "").lower()
     reg = registrable_domain(host)
     if not reg or reg in FREEMAIL:
         return None
-    entry = catalog.match_host(host)
+    # 1. Domain (inkl. übergeordneter Domains) im JDM-Katalog  2. Markenname aus Absendername/Domain
+    entry = catalog.match_host(host) or catalog.match_brand(display_name, reg.split(".", 1)[0])
     if entry is not None:
         # Mehrere Domains desselben Dienstes (z. B. e.foundation, ecloud.global) → ein Dienst
         return ServiceIdentity(key=f"jdm:{entry.name}", display_name=entry.name, jdm_name=entry.name, domain=reg)

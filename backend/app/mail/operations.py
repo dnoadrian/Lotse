@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from ..detection.classifier import classify
+from ..detection.classifier import REGISTRATION_CATEGORIES, classify
 from ..detection.headers import from_mapping, parse_raw
 from ..models import Evidence, MailAccount
 from . import gmail_client, imap_client
@@ -74,8 +74,11 @@ def folders(account: MailAccount) -> list[dict]:
 
 # ------------------------------------------------------------------ Nachrichten
 
-def _evidence_refs(db: Session, account: MailAccount, folder: str | None, uidvalidity: str | None = None) -> dict[str, str]:
+def _evidence_refs(db: Session, account: MailAccount, folder: str | None, uidvalidity: str | None = None,
+                   registration_only: bool = False) -> dict[str, str]:
     q = select(Evidence.msg_ref, Evidence.category).where(Evidence.account_id == account.id)
+    if registration_only:
+        q = q.where(Evidence.category.in_(REGISTRATION_CATEGORIES))
     if folder is not None:
         q = q.where(Evidence.folder == folder)
     if uidvalidity:
@@ -85,9 +88,11 @@ def _evidence_refs(db: Session, account: MailAccount, folder: str | None, uidval
 
 def _row(ref: str, h, category: str | None) -> MessageRow:
     c = classify(h)
+    if category in ("contact", None) and c is not None and c.category != "contact":
+        category = c.category
     return MessageRow(
         id=ref, from_name=h.from_name, from_addr=h.from_addr, subject=h.subject, date=h.date,
-        category=category or (c.category if c else None),
+        category=None if category == "contact" else category,
     )
 
 
@@ -104,7 +109,8 @@ def list_messages(db: Session, account: MailAccount, folder: str, page: int, pag
                 uids = imap_client.search_uids(c)
                 ev = _evidence_refs(db, account, f.raw, uidvalidity)
                 if only_registration:
-                    uids = [u for u in uids if str(u) in ev]
+                    reg = _evidence_refs(db, account, f.raw, uidvalidity, registration_only=True)
+                    uids = [u for u in uids if str(u) in reg]
                 uids.sort(reverse=True)
                 total = len(uids)
                 chunk = uids[(page - 1) * page_size : page * page_size]
@@ -117,7 +123,7 @@ def list_messages(db: Session, account: MailAccount, folder: str, page: int, pag
         with gmail_client.GmailClient(creds["secret"]) as g:
             ev = _evidence_refs(db, account, None)
             if only_registration:
-                ids = sorted(ev.keys())
+                ids = sorted(_evidence_refs(db, account, None, registration_only=True).keys())
                 total = len(ids)
                 ids = ids[(page - 1) * page_size : page * page_size]
                 next_cursor = None
@@ -177,7 +183,7 @@ def _delete_imap(db, account, creds, folder, mode, ids, permanent, expected_coun
         elif mode == "all":
             uids = imap_client.search_uids(c)
         else:
-            ev = _evidence_refs(db, account, f.raw, current_uv)
+            ev = _evidence_refs(db, account, f.raw, current_uv, registration_only=True)
             uids = sorted(u for u in imap_client.search_uids(c) if str(u) in ev)
         if mode != "selected" and expected_count is not None and len(uids) != expected_count:
             raise OperationError(
@@ -216,7 +222,7 @@ def _delete_gmail(db, account, creds, folder, mode, ids, permanent, expected_cou
         elif mode == "all":
             targets = list(g.iter_message_ids(label_id=folder))
         else:
-            targets = sorted(_evidence_refs(db, account, None).keys())
+            targets = sorted(_evidence_refs(db, account, None, registration_only=True).keys())
         if any(not GMAIL_ID.match(t) for t in targets):
             raise OperationError("Ungültige Nachrichten-ID.")
         if mode != "selected" and expected_count is not None and len(targets) != expected_count:

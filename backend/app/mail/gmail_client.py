@@ -106,6 +106,7 @@ class GmailMessage:
     headers: dict[str, str]
     internal_date_ms: int
     label_ids: list[str]
+    snippet: str = ""
 
 
 class GmailClient:
@@ -210,6 +211,7 @@ class GmailClient:
             headers=headers,
             internal_date_ms=int(data.get("internalDate", 0)),
             label_ids=data.get("labelIds", []),
+            snippet=str(data.get("snippet", ""))[:1000],
         )
 
     def trash(self, msg_id: str) -> bool:

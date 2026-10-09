@@ -27,6 +27,9 @@ from ..security.netguard import ResolvedTarget, resolve_target
 log = logging.getLogger("lotse.imap")
 
 HEADER_FIELDS = "FROM SUBJECT DATE LIST-UNSUBSCRIBE AUTO-SUBMITTED"
+# Für die Text-Erkennung zusätzlich die MIME-Struktur
+SCAN_HEADER_FIELDS = HEADER_FIELDS + " CONTENT-TYPE CONTENT-TRANSFER-ENCODING"
+BODY_BYTES = 8192
 FETCH_BATCH = 250
 MUTATE_BATCH = 500
 TRASH_NAMES = ("trash", "papierkorb", "deleted items", "deleted messages", "gelöschte elemente", "inbox.trash")
@@ -265,6 +268,37 @@ def fetch_headers(client: imaplib.IMAP4_SSL, uids: list[int]) -> Iterator[tuple[
                 m = _UID_RE.search(item[0])
                 if m:
                     yield int(m.group(1)), item[1][:16384]
+
+
+_BODY_RE = re.compile(rb"BODY\[TEXT\]")
+
+
+def fetch_for_scan(client: imaplib.IMAP4_SSL, uids: list[int]) -> Iterator[tuple[int, bytes, bytes]]:
+    """Kopfzeilen und die ersten 8 KB des Textes je Nachricht (BODY.PEEK → setzt kein \\Seen)."""
+    for chunk in _chunks(sorted(uids), FETCH_BATCH):
+        typ, data = client.uid(
+            "FETCH", uid_set(chunk),
+            f"(UID BODY.PEEK[HEADER.FIELDS ({SCAN_HEADER_FIELDS})] BODY.PEEK[TEXT]<0.{BODY_BYTES}>)",
+        )
+        if typ != "OK":
+            raise ImapError("Nachrichten konnten nicht gelesen werden.")
+        current: int | None = None
+        parts: dict[int, list[bytes]] = {}
+        for item in data:
+            if not isinstance(item, tuple) or len(item) < 2:
+                continue
+            m = _UID_RE.search(item[0])
+            if m:
+                current = int(m.group(1))
+            if current is None:
+                continue
+            slot = parts.setdefault(current, [b"", b""])
+            if _BODY_RE.search(item[0]):
+                slot[1] = item[1][:BODY_BYTES]
+            else:
+                slot[0] = item[1][:16384]
+        for uid, (head, body) in parts.items():
+            yield uid, head, body
 
 
 def existing_uids(client: imaplib.IMAP4_SSL, uids: list[int]) -> set[int]:

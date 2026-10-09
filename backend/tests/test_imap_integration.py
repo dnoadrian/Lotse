@@ -148,11 +148,14 @@ def test_scan_detects_and_merges_services(auth, account):
     assert {"GitHub", "Spotify", "Dropbox", "Adobe"} <= services.keys()
     # Persönliche Freemail-Absender und reine Newsletter sind keine Dienste
     assert not any("gmail" in d for s in services.values() for d in s["domains"])
-    assert "Kulturverein-Beispiel" not in services
+    # Jede Mail zählt: auch reine Newsletter-Absender erscheinen – aber nur als "mögliches" Konto
+    kultur = next(s for s in services.values() if "kulturverein-beispiel.at" in s["domains"])
+    assert kultur["quality"] == "niedrig" and kultur["jdm"] is None
 
     gh = services["GitHub"]
     assert gh["jdm"] and gh["jdm"]["url"].startswith("https://")
-    assert gh["message_count"] == 3 and gh["signal_count"] == 2  # Digest ist kein Signal
+    assert gh["message_count"] == 3 and gh["signal_count"] == 3  # jede Mail ist ein Beleg
+    assert gh["signals"]["welcome"] == 1 and gh["signals"]["verification"] == 1
     assert gh["quality"] == "hoch" and gh["confidence"] >= 0.85
     assert gh["sender_count"] == 2  # zwei Absender zusammengeführt
 
@@ -165,7 +168,7 @@ def test_scan_detects_and_merges_services(auth, account):
     # Rescan ist idempotent
     auth.post("/api/scans", json={"account_id": account["id"]})
     again = {s["name"]: s for s in auth.get("/api/services").json()}
-    assert again["GitHub"]["signal_count"] == 2 and len(again) == len(services)
+    assert again["GitHub"]["signal_count"] == 3 and len(again) == len(services)
 
 
 def test_folders_and_message_listing(auth, account):

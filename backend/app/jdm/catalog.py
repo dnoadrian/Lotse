@@ -70,6 +70,14 @@ class Catalog:
         self.version = version
         self._by_name = {e.name: e for e in entries}
         self._by_domain: dict[str, JdmEntry] = {}
+        # Markenname → Eintrag, nur eindeutige Namen ab 4 Zeichen (z. B. "Notion", "Render")
+        counts: dict[str, int] = {}
+        for e in entries:
+            counts[normalize_name(e.name)] = counts.get(normalize_name(e.name), 0) + 1
+        self._by_name_norm = {
+            normalize_name(e.name): e for e in entries
+            if len(normalize_name(e.name)) >= 4 and counts[normalize_name(e.name)] == 1
+        }
         for e in entries:
             for d in e.domains:
                 # Bei Mehrfachbelegung gewinnt der erste Eintrag (Datei ist alphabetisch sortiert)
@@ -80,6 +88,14 @@ class Catalog:
 
     def by_name(self, name: str | None) -> JdmEntry | None:
         return self._by_name.get(name) if name else None
+
+    def match_brand(self, display_name: str, registrable_label: str) -> JdmEntry | None:
+        """Rückfall, wenn die Absender-Domain nicht im Katalog steht (z. B. makenotion.com → Notion)."""
+        for cand in brand_candidates(display_name, registrable_label):
+            hit = self._by_name_norm.get(cand)
+            if hit:
+                return hit
+        return None
 
     def match_host(self, host: str) -> JdmEntry | None:
         """Sucht den Host und dann schrittweise seine übergeordneten Domains (mail.github.com → github.com)."""
@@ -94,6 +110,35 @@ class Catalog:
             if hit:
                 return hit
         return None
+
+
+_BRAND_PREFIX = re.compile(r"^(get|try|use|join|make|my|go|hello|team|mail|email|news|info)(?=[a-z0-9]{4,}$)")
+_BRAND_SUFFIX = re.compile(r"(?<=[a-z0-9]{4})(app|hq|mail|mailer|news|team|inc|official|online)$")
+
+
+def normalize_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (value or "").lower())
+
+
+def brand_candidates(display_name: str, registrable_label: str) -> list[str]:
+    """Mögliche Markennamen aus Absendername ("Stephen from Render", "Notion Team") und Domain ("makenotion")."""
+    out: list[str] = []
+    name = (display_name or "").strip().lower()
+    if name:
+        for part in re.split(r"\s+(?:from|von|at|bei|via|\||-|–)\s+", name):
+            part = re.sub(r"\b(the|team|support|newsletter|news|service|kundenservice|official|mail|no-?reply)\b", " ", part)
+            out.append(normalize_name(part))
+    label = normalize_name(registrable_label)
+    if label:
+        out.append(label)
+        out.append(_BRAND_PREFIX.sub("", label))
+        out.append(_BRAND_SUFFIX.sub("", label))
+    seen, result = set(), []
+    for c in out:
+        if len(c) >= 4 and c not in seen:
+            seen.add(c)
+            result.append(c)
+    return result
 
 
 def load_catalog(data_dir: str | Path) -> Catalog:

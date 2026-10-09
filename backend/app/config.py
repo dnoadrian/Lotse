@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import os
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
 
     # Betrieb
     environment: str = "production"  # production | development | test
-    public_url: str = "https://localhost"
+    public_url: str = Field(default="https://localhost", validate_default=True)
     database_url: str = "postgresql+psycopg://lotse:lotse@db:5432/lotse"
 
     # Geheimnisse (Pflicht in Produktion)
@@ -51,11 +52,29 @@ class Settings(BaseSettings):
 
     # Daten
     jdm_data_dir: str = str(BASE_DIR / "data" / "jdm")
+    # Gebautes Frontend direkt aus dem Backend ausliefern (Render: ein einziger Web-Dienst)
+    static_dir: str = ""
+    # Einmal-Token für die Ersteinrichtung im Browser (nur solange es noch keinen Benutzer gibt)
+    setup_token: str = ""
+    gmail_scan_limit: int = 3000
 
-    @field_validator("public_url")
+    @field_validator("public_url", mode="before")
     @classmethod
-    def _strip_slash(cls, v: str) -> str:
-        return v.rstrip("/")
+    def _public_url(cls, v: str) -> str:
+        # Render setzt RENDER_EXTERNAL_URL automatisch (https://<name>.onrender.com)
+        if (not v or v == "https://localhost") and os.environ.get("RENDER_EXTERNAL_URL"):
+            v = os.environ["RENDER_EXTERNAL_URL"]
+        return str(v).rstrip("/")
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _db_driver(cls, v: str) -> str:
+        # Render/Heroku liefern postgres:// bzw. postgresql:// – SQLAlchemy braucht den psycopg-Treiber
+        v = str(v)
+        for prefix in ("postgres://", "postgresql://"):
+            if v.startswith(prefix):
+                return "postgresql+psycopg://" + v[len(prefix):]
+        return v
 
     @property
     def is_production(self) -> bool:

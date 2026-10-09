@@ -7,6 +7,7 @@ import { ThemeToggle } from "../components/Layout";
 import { Icon } from "../components/Icons";
 import { useAuth } from "../lib/auth";
 import { formatCountdown } from "../lib/format";
+import { SetupForm } from "./SetupForm";
 
 interface LocationState {
   from?: string;
@@ -45,6 +46,14 @@ export function LoginPage() {
   const left = useCountdown(retryAfter);
   const codeRef = useRef<HTMLInputElement>(null);
   const userRef = useRef<HTMLInputElement>(null);
+
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [setupDone, setSetupDone] = useState(false);
+  useEffect(() => {
+    ep.getSetupStatus()
+      .then((r) => setSetupNeeded(r.needed))
+      .catch(() => setSetupNeeded(false));
+  }, []);
 
   useEffect(() => {
     if (auth.mfaPending) setStep(2);
@@ -155,7 +164,21 @@ export function LoginPage() {
             </div>
           ) : null}
 
-          {step === 1 ? (
+          {setupNeeded ? (
+            <SetupForm
+              onDone={(name) => {
+                setSetupNeeded(false);
+                setSetupDone(true);
+                setUsername(name);
+              }}
+            />
+          ) : null}
+          {setupDone ? (
+            <div className="banner banner-success" role="status">
+              Benutzer angelegt. Melde dich jetzt an.
+            </div>
+          ) : null}
+          {setupNeeded ? null : step === 1 ? (
             <form className="stack-18" onSubmit={submitPassword} noValidate>
               <div className="stack-4">
                 <h1 className="login-title">Anmelden</h1>

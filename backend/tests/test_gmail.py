@@ -33,7 +33,7 @@ class FakeGmail:
         self.messages = {
             "a1b2c3d4e5f60001": ("GitHub <noreply@github.com>", "Welcome to GitHub!", ["INBOX"]),
             "a1b2c3d4e5f60002": ("Spotify <no-reply@spotify.com>", "Bitte bestätige deine E-Mail-Adresse", ["INBOX"]),
-            "a1b2c3d4e5f60003": ("Shop <news@shop.example>", "Neue Angebote", ["INBOX"]),
+            "a1b2c3d4e5f60003": ("Shop <news@shop-beispiel.at>", "Neue Angebote", ["INBOX"]),
         }
         self.trashed: list[str] = []
         self.refuse_trash: set[str] = set()
@@ -147,7 +147,9 @@ def test_gmail_scan_folders_and_listing(auth, client, gmail_env, google):
     job = auth.post("/api/scans", json={"account_id": acc["id"]}).json()
     assert auth.get(f"/api/scans/{job['id']}").json()["status"] == "done"
     names = {s["name"] for s in auth.get("/api/services").json()}
-    assert {"GitHub", "Spotify"} <= names and not any("Shop" in n for n in names)
+    assert {"GitHub", "Spotify"} <= names
+    shop = next(s for s in auth.get("/api/services").json() if "shop-beispiel.at" in s["domains"])
+    assert shop["quality"] == "niedrig"
 
     folders = {f["id"]: f for f in auth.get(f"/api/mail/{acc['id']}/folders").json()}
     assert folders["INBOX"]["name"] == "Posteingang" and folders["Label_1"]["name"] == "Privat"

@@ -145,6 +145,7 @@ class Evidence(Base):
     score: Mapped[float] = mapped_column(Float, default=0.0)
     sender_domain: Mapped[str] = mapped_column(String(253), default="")
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reasons: Mapped[list | None] = mapped_column(JSON, nullable=True)  # Regel-Bezeichnungen, kein Mail-Inhalt
 
 
 class AuditLog(Base):

@@ -55,7 +55,7 @@ Vertrauensgrenzen: (1) Internet ↔ Caddy, (2) Backend ↔ fremde Mailserver (vo
 | T18 | Denial of Service | DoS | Body-Limit (Caddy 1 MB, App 256 KB); Zeitlimits für IMAP/HTTP; Scans im Hintergrund mit begrenztem Pool; Gmail-Bulk-Limit 1000 pro Vorgang | Volumetrische Angriffe → vorgelagerter Schutz |
 | T19 | Clickjacking, MIME-Sniffing, Referrer-Lecks | Tampering/Disclosure | `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, COOP/CORP, HSTS | – |
 | T20 | Container-Ausbruch / laterale Bewegung | Elevation | Backend als Nicht-Root (UID 10001), Dateisystem schreibgeschützt, alle Capabilities entfernt, `no-new-privileges`; Datenbank nur im internen Netz ohne Internet und ohne offene Ports | Kernel-Lücken des Hosts |
-| T21 | Schwache Konfiguration | – | Start bricht ab, wenn Schlüssel fehlen/zu kurz sind, `PUBLIC_URL` kein HTTPS ist oder `COOKIE_SECURE` in Produktion aus ist; API-Doku in Produktion abgeschaltet; keine offene Registrierung (Benutzer nur per CLI) | – |
+| T21 | Schwache Konfiguration | – | Start bricht ab, wenn Schlüssel fehlen/zu kurz sind, `PUBLIC_URL` kein HTTPS ist oder `COOKIE_SECURE` in Produktion aus ist; API-Doku in Produktion abgeschaltet; offene Registrierung ist pro IP begrenzt (5/Stunde) und mit `LOTSE_OPEN_REGISTRATION=false` abschaltbar; jedes Konto sieht ausschließlich eigene Daten | – |
 | T22 | CSV-Formel-Injection beim Export | Tampering | Zellen, die mit `= + - @` beginnen, werden mit `'` entschärft (getestet) | – |
 
 ## 4. Umgesetzte Maßnahmen im Überblick

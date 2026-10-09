@@ -13,7 +13,7 @@ test.describe.configure({ mode: "serial" });
 async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Benutzername").fill(USER);
-  await page.getByLabel("Passwort").fill(PASS);
+  await page.getByLabel("Passwort", { exact: true }).fill(PASS);
   await page.getByRole("button", { name: "Weiter" }).click();
   await expect(page.getByRole("heading", { name: "Konten" })).toBeVisible();
 }
@@ -37,9 +37,28 @@ test("Anmeldung: falsches Passwort wird abgewiesen", async ({ page }) => {
   await page.screenshot({ path: SHOTS + "desktop-login.png" });
   // Eigener Benutzername, damit die Brute-Force-Sperre den Testbenutzer nicht trifft
   await page.getByLabel("Benutzername").fill("gibt-es-nicht");
-  await page.getByLabel("Passwort").fill("falsches-passwort-123");
+  await page.getByLabel("Passwort", { exact: true }).fill("falsches-passwort-123");
   await page.getByRole("button", { name: "Weiter" }).click();
   await expect(page.getByRole("alert")).toContainText("Benutzername oder Passwort falsch");
+});
+
+test("Registrierung: eigenes Konto mit Auge statt Doppeleingabe, dunkles Design als Standard", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "Konto erstellen" }).click();
+  await expect(page.getByRole("heading", { name: "Konto erstellen" })).toBeVisible();
+  const name = `e2e${Date.now() % 1_000_000}`;
+  await page.getByLabel("Benutzername").fill(name);
+  const pw = page.getByLabel("Passwort", { exact: true });
+  await pw.fill("abcd1");
+  await expect(pw).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Passwort anzeigen" }).click();
+  await expect(pw).toHaveAttribute("type", "text");
+  await page.screenshot({ path: SHOTS + "desktop-registrierung-dunkel.png" });
+  await page.getByRole("button", { name: "Konto erstellen" }).last().click();
+  await expect(page.getByRole("heading", { name: "Konten" })).toBeVisible();
+  // Neues Konto sieht keine fremden Daten
+  await expect(page.getByText("GitHub")).toHaveCount(0);
 });
 
 test("Geschützte Seiten leiten ohne Anmeldung zur Anmeldung", async ({ page }) => {

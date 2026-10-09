@@ -33,7 +33,9 @@ docker compose ps          # alle drei Dienste "healthy"/"running"
 
 ## 3. Ersten Benutzer anlegen
 
-Es gibt keine offene Registrierung. Benutzer werden über die Kommandozeile angelegt:
+Jeder kann sich auf der Anmeldeseite über „Konto erstellen“ ein eigenes Konto anlegen; jedes Konto sieht nur
+seine eigenen Postfächer und Daten. Soll das nicht möglich sein, `LOTSE_OPEN_REGISTRATION=false` in `.env`
+setzen. Benutzer lassen sich außerdem über die Kommandozeile anlegen:
 
 ```bash
 docker compose exec backend python -m app.cli create-user dein-name

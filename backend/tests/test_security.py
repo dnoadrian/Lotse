@@ -107,7 +107,7 @@ def _all_routes(routes, prefix=""):
 def test_all_api_routes_are_covered(app):
     """Jede neue Route muss bewusst öffentlich sein oder Anmeldung verlangen."""
     public = {"/api/health", "/api/auth/login", "/api/auth/totp", "/api/auth/logout", "/api/auth/session",
-              "/api/oauth/google/callback", "/api/setup", "/api/setup/status"}
+              "/api/oauth/google/callback", "/api/auth/register"}
     checked = 0
     for path, route in _all_routes(app.routes):
         if not path.startswith("/api") or path in public or path.startswith("/api/docs") or path == "/api/openapi.json":
@@ -377,34 +377,52 @@ def test_connection_tests_rate_limited(client, auth, monkeypatch):
     assert codes[:10] == [201] * 10 and codes[10] == 429 and len(calls) == 10
 
 
-# ---------------------------------------------------------------- Ersteinrichtung (Render)
+# ---------------------------------------------------------------- Offene Registrierung
 
-def test_setup_only_with_token_and_only_once(settings_env, monkeypatch):
+def test_registration_creates_separate_account_and_logs_in(client, user):
+    r = client.post("/api/auth/register", json={"username": "Bert", "password": "abcd"}, headers=H)
+    assert r.status_code == 201, r.text
+    s = Session(client, r.json()["csrf_token"])
+    assert s.get("/api/mail-accounts").json() == []
+    assert client.get("/api/auth/session").json()["user"]["username"] == "bert"
+
+
+@pytest.mark.parametrize("body,status", [
+    ({"username": "anna", "password": "neues-pw"}, 409),          # vergeben
+    ({"username": "ANNA", "password": "neues-pw"}, 409),          # Groß/klein egal
+    ({"username": "x", "password": "abcd"}, 422),                  # zu kurz
+    ({"username": "böse name", "password": "abcd"}, 422),          # ungültige Zeichen
+    ({"username": "carla", "password": "abc"}, 400),               # Passwort zu kurz
+    ({"username": "carla", "password": "aaaa"}, 400),              # gleichförmig
+    ({"username": "carla", "password": "xcarlax"}, 400),           # enthält Benutzernamen
+])
+def test_registration_validation(client, user, body, status):
+    assert client.post("/api/auth/register", json=body, headers=H).status_code == status
+
+
+def test_registration_rate_limited_per_ip(client):
+    codes = [client.post("/api/auth/register", json={"username": f"user{i}", "password": "abcd1"}, headers=H).status_code
+             for i in range(6)]
+    assert codes[:5] == [201] * 5 and codes[5] == 429
+
+
+def test_registration_can_be_disabled(settings_env, monkeypatch):
     from app import scanner
     from app.main import create_app
-    settings_env(setup_token="einmal-token-1234567890")
+    settings_env(open_registration="false")
     monkeypatch.setattr(scanner, "submit", scanner.run)
     with TestClient(create_app()) as c:
-        assert c.get("/api/setup/status").json() == {"needed": True}
-        bad = c.post("/api/setup", json={"token": "falsch", "username": "adrian", "password": PASSWORD}, headers=H)
-        assert bad.status_code == 403
-        weak = c.post("/api/setup", json={"token": "einmal-token-1234567890", "username": "adrian", "password": "abc"},
-                      headers=H)
-        assert weak.status_code == 400
-        ok = c.post("/api/setup", json={"token": "einmal-token-1234567890", "username": "Adrian", "password": PASSWORD},
-                    headers=H)
-        assert ok.status_code == 200
-        assert c.get("/api/setup/status").json() == {"needed": False}
-        again = c.post("/api/setup", json={"token": "einmal-token-1234567890", "username": "mallory",
-                                           "password": PASSWORD}, headers=H)
-        assert again.status_code == 404
-        login(c, "adrian")
+        assert c.get("/api/auth/register").json() == {"open": False}
+        r = c.post("/api/auth/register", json={"username": "dora", "password": "abcd"}, headers=H)
+        assert r.status_code == 404
 
 
-def test_setup_disabled_without_token(client):
-    assert client.get("/api/setup/status").json() == {"needed": False}
-    r = client.post("/api/setup", json={"token": "x", "username": "adrian", "password": PASSWORD}, headers=H)
-    assert r.status_code == 404
+def test_registration_requires_csrf_protections(client):
+    r = client.post("/api/auth/register", json={"username": "eve", "password": "abcd"})
+    assert r.status_code == 403
+    r = client.post("/api/auth/register", json={"username": "eve", "password": "abcd"},
+                    headers={**H, "Origin": "https://evil.example"})
+    assert r.status_code == 403
 
 
 def test_frontend_served_with_spa_fallback(settings_env, monkeypatch, tmp_path):

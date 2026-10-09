@@ -27,9 +27,9 @@ services:
         generateValue: true
       - key: LOTSE_ENCRYPTION_KEY
         generateValue: true
-      # Einmal-Token für die Ersteinrichtung im Browser (Wert im Dashboard unter Environment ablesen)
-      - key: LOTSE_SETUP_TOKEN
-        generateValue: true
+      # Jeder kann sich ein eigenes Konto anlegen ("false" = abschalten)
+      - key: LOTSE_OPEN_REGISTRATION
+        value: "true"
       # Optional: eigene Domain, sonst automatisch https://<name>.onrender.com
       - key: LOTSE_PUBLIC_URL
         sync: false

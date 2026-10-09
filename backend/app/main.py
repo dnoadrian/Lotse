@@ -14,7 +14,7 @@ from . import db as dbmod
 from .config import get_settings
 from .db import Base
 from .jdm.catalog import get_catalog
-from .routers import accounts, auth, mail, scans, security, services, setup
+from .routers import accounts, auth, mail, scans, security, services
 from .security.middleware import SecurityMiddleware
 
 log = logging.getLogger("lotse")
@@ -74,7 +74,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Lotse", docs_url=docs, redoc_url=None, openapi_url=None if s.is_production else "/api/openapi.json")
     app.add_middleware(SecurityMiddleware)
 
-    for r in (auth.router, security.router, accounts.router, scans.router, services.router, mail.router, setup.router):
+    for r in (auth.router, security.router, accounts.router, scans.router, services.router, mail.router):
         app.include_router(r)
 
     @app.get("/api/health")

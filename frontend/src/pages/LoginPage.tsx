@@ -7,7 +7,7 @@ import { ThemeToggle } from "../components/Layout";
 import { Icon } from "../components/Icons";
 import { useAuth } from "../lib/auth";
 import { formatCountdown } from "../lib/format";
-import { SetupForm } from "./SetupForm";
+import { PasswordInput } from "../components/PasswordInput";
 
 interface LocationState {
   from?: string;
@@ -47,13 +47,14 @@ export function LoginPage() {
   const codeRef = useRef<HTMLInputElement>(null);
   const userRef = useRef<HTMLInputElement>(null);
 
-  const [setupNeeded, setSetupNeeded] = useState(false);
-  const [setupDone, setSetupDone] = useState(false);
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [registrationOpen, setRegistrationOpen] = useState(false);
   useEffect(() => {
-    ep.getSetupStatus()
-      .then((r) => setSetupNeeded(r.needed))
-      .catch(() => setSetupNeeded(false));
+    ep.getRegistrationStatus()
+      .then((r) => setRegistrationOpen(r.open))
+      .catch(() => setRegistrationOpen(false));
   }, []);
+  const registering = mode === "register";
 
   useEffect(() => {
     if (auth.mfaPending) setStep(2);
@@ -82,6 +83,13 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
+      if (registering) {
+        const reg = await ep.register(username.trim(), password);
+        setPassword("");
+        await auth.completeLogin(reg.csrf_token);
+        navigate(target, { replace: true });
+        return;
+      }
       const res = await ep.login(username.trim(), password);
       setPassword("");
       if (res.mfa_required) {
@@ -164,25 +172,13 @@ export function LoginPage() {
             </div>
           ) : null}
 
-          {setupNeeded ? (
-            <SetupForm
-              onDone={(name) => {
-                setSetupNeeded(false);
-                setSetupDone(true);
-                setUsername(name);
-              }}
-            />
-          ) : null}
-          {setupDone ? (
-            <div className="banner banner-success" role="status">
-              Benutzer angelegt. Melde dich jetzt an.
-            </div>
-          ) : null}
-          {setupNeeded ? null : step === 1 ? (
+          {step === 1 ? (
             <form className="stack-18" onSubmit={submitPassword} noValidate>
               <div className="stack-4">
-                <h1 className="login-title">Anmelden</h1>
-                <span className="muted">Schritt 1 von 2</span>
+                <h1 className="login-title">{registering ? "Konto erstellen" : "Anmelden"}</h1>
+                <span className="muted">
+                  {registering ? "Dein eigenes Konto – nur du siehst deine Postfächer und Daten." : "Schritt 1 von 2"}
+                </span>
               </div>
               {error ? (
                 <div className="error-box" role="alert">
@@ -208,29 +204,44 @@ export function LoginPage() {
                   autoComplete="username"
                   autoCapitalize="none"
                   spellCheck={false}
-                  placeholder="admin"
+                  placeholder="dein-name"
                   required
                   maxLength={64}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
               </label>
-              <label className="field">
-                Passwort
-                <input
+              <div className="field">
+                <label htmlFor="login-password">Passwort</label>
+                <PasswordInput
+                  id="login-password"
                   className="input"
-                  type="password"
                   name="password"
-                  autoComplete="current-password"
+                  autoComplete={registering ? "new-password" : "current-password"}
                   required
                   maxLength={256}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
-              </label>
+              </div>
               <button type="submit" className="btn btn-primary btn-block" disabled={busy || !username.trim() || !password || limited}>
-                {busy ? "Wird geprüft …" : "Weiter"}
+                {busy ? "Wird geprüft …" : registering ? "Konto erstellen" : "Weiter"}
               </button>
+              {registrationOpen ? (
+                <p className="login-switch muted small no-margin">
+                  {registering ? "Schon ein Konto?" : "Noch kein Konto?"}{" "}
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => {
+                      setMode(registering ? "login" : "register");
+                      setError(null);
+                    }}
+                  >
+                    {registering ? "Anmelden" : "Konto erstellen"}
+                  </button>
+                </p>
+              ) : null}
             </form>
           ) : (
             <form className="stack-18" onSubmit={submitCode} noValidate>

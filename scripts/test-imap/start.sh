@@ -96,7 +96,7 @@ EOF
 
 dovecot -c "$DIR/dovecot.conf" stop 2>/dev/null || true
 sleep 0.5
-dovecot -c "$DIR/dovecot.conf"
+dovecot -c "$DIR/dovecot.conf" </dev/null >/dev/null 2>&1
 for _ in $(seq 1 20); do
   if (echo > /dev/tcp/127.0.0.1/"$PORT") 2>/dev/null; then
     echo "Dovecot läuft auf $HOST:$PORT (CA: $DIR/ca.pem)"

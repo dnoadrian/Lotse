@@ -54,8 +54,9 @@ class Settings(BaseSettings):
     jdm_data_dir: str = str(BASE_DIR / "data" / "jdm")
     # Gebautes Frontend direkt aus dem Backend ausliefern (Render: ein einziger Web-Dienst)
     static_dir: str = ""
-    # Einmal-Token für die Ersteinrichtung im Browser (nur solange es noch keinen Benutzer gibt)
-    setup_token: str = ""
+    # Jeder darf sich ein eigenes Konto anlegen (Daten sind strikt pro Konto getrennt)
+    open_registration: bool = True
+    registrations_per_ip_per_hour: int = 5
     gmail_scan_limit: int = 3000
 
     @field_validator("public_url", mode="before")

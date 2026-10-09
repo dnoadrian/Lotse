@@ -2575,3 +2575,40 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ------------------------------------------------------------------ Passwortfeld mit Auge */
+
+.password-wrap {
+  position: relative;
+  display: flex;
+}
+
+.password-wrap .password-input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 44px;
+  height: 100%;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 0 10px 10px 0;
+}
+
+.password-toggle:hover {
+  color: var(--text);
+}
+
+.login-switch {
+  text-align: center;
+}

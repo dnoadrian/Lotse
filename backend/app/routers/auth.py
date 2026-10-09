@@ -7,6 +7,7 @@ import pyotp
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import audit
@@ -15,7 +16,7 @@ from ..db import get_db
 from ..models import User, UserSession
 from ..security import ratelimit
 from ..security.crypto import constant_time_equals, decrypt
-from ..security.passwords import hash_password, needs_rehash, verify_password
+from ..security.passwords import WeakPasswordError, hash_password, needs_rehash, validate_password, verify_password
 from ..security.sessions import (
     _load_session,
     clear_cookie,
@@ -29,6 +30,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 class LoginIn(BaseModel):
     username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class RegisterIn(BaseModel):
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
     password: str = Field(min_length=1, max_length=256)
 
 
@@ -96,6 +102,43 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
         return {"mfa_required": True}
     audit.record(db, "login", user.id, request)
     return {"mfa_required": False, "csrf_token": csrf_token_for(sess.id)}
+
+
+@router.get("/register")
+def registration_status():
+    return {"open": get_settings().open_registration}
+
+
+@router.post("/register", status_code=201)
+def register(body: RegisterIn, request: Request, response: Response, db: Session = Depends(get_db)):
+    """Offene Registrierung: Jeder legt sein eigenes Konto an und sieht nur seine eigenen Daten."""
+    s = get_settings()
+    if not s.open_registration:
+        raise HTTPException(404, "Die Registrierung ist deaktiviert.")
+    ok, retry = ratelimit.hit(db, f"register:{client_ip(request)}", s.registrations_per_ip_per_hour, timedelta(hours=1))
+    if not ok:
+        raise _too_many(retry)
+    username = body.username.strip().lower()
+    try:
+        validate_password(body.password, username)
+    except WeakPasswordError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if db.execute(select(User.id).where(User.username == username)).first() is not None:
+        raise HTTPException(409, "Dieser Benutzername ist bereits vergeben.")
+    user = User(username=username, password_hash=hash_password(body.password))
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError as exc:  # gleichzeitige Registrierung mit gleichem Namen
+        db.rollback()
+        raise HTTPException(409, "Dieser Benutzername ist bereits vergeben.") from exc
+    old = _load_session(request, db)
+    if old is not None:
+        db.delete(old)
+        db.commit()
+    sess = create_session(db, user, request, response, mfa_pending=False)
+    audit.record(db, "register", user.id, request)
+    return {"csrf_token": csrf_token_for(sess.id)}
 
 
 @router.post("/totp")

@@ -6,9 +6,10 @@ const STORAGE_KEY = "lotse-theme";
 export function readStoredTheme(): Theme {
   try {
     const v = window.localStorage.getItem(STORAGE_KEY);
-    return v === "dark" ? "dark" : "light";
+    // Standard: dunkles Design; hell nur, wenn ausdrücklich gewählt
+    return v === "light" ? "light" : "dark";
   } catch {
-    return "light";
+    return "dark";
   }
 }
 
@@ -29,7 +30,7 @@ interface ThemeCtx {
   toggle: () => void;
 }
 
-const Ctx = createContext<ThemeCtx>({ theme: "light", toggle: () => {} });
+const Ctx = createContext<ThemeCtx>({ theme: "dark", toggle: () => {} });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => readStoredTheme());

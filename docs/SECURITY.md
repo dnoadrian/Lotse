@@ -60,7 +60,7 @@ Vertrauensgrenzen: (1) Internet ↔ Caddy, (2) Backend ↔ fremde Mailserver (vo
 
 ## 4. Umgesetzte Maßnahmen im Überblick
 
-- **Authentifizierung:** Argon2id (RFC 9106), Mindestlänge 12, optional TOTP (RFC 6238) mit Replay-Schutz.
+- **Authentifizierung:** Argon2id (RFC 9106), Mindestlänge 4 (bewusst niedrig gewählt; Schutz vor Raten über Rate-Limits und optionale 2FA), optional TOTP (RFC 6238) mit Replay-Schutz.
 - **Sitzungen:** serverseitig, gehasht, rotierend, mit Leerlauf- und absolutem Ablauf.
 - **Transport:** HTTPS über Caddy (Let's Encrypt oder interne CA), HSTS, HTTP→HTTPS-Umleitung.
 - **Eingaben:** Pydantic-Schemas mit Längen- und Mustergrenzen, Allowlists für Ordner und IDs.

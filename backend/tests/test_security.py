@@ -275,7 +275,7 @@ def test_password_change_rules_and_session_revocation(client, user):
     login(other)
     s = login(client)
     assert s.post("/api/security/password", json={"current_password": "falsch", "new_password": "x" * 20}).status_code == 400
-    assert s.post("/api/security/password", json={"current_password": PASSWORD, "new_password": "kurz"}).status_code == 400
+    assert s.post("/api/security/password", json={"current_password": PASSWORD, "new_password": "abc"}).status_code == 400
     r = s.post("/api/security/password", json={"current_password": PASSWORD, "new_password": "ein-neues-langes-passwort"})
     assert r.status_code == 200 and r.json()["other_sessions_revoked"] == 1
     assert other.get("/api/mail-accounts").status_code == 401
@@ -388,7 +388,7 @@ def test_setup_only_with_token_and_only_once(settings_env, monkeypatch):
         assert c.get("/api/setup/status").json() == {"needed": True}
         bad = c.post("/api/setup", json={"token": "falsch", "username": "adrian", "password": PASSWORD}, headers=H)
         assert bad.status_code == 403
-        weak = c.post("/api/setup", json={"token": "einmal-token-1234567890", "username": "adrian", "password": "kurz"},
+        weak = c.post("/api/setup", json={"token": "einmal-token-1234567890", "username": "adrian", "password": "abc"},
                       headers=H)
         assert weak.status_code == 400
         ok = c.post("/api/setup", json={"token": "einmal-token-1234567890", "username": "Adrian", "password": PASSWORD},

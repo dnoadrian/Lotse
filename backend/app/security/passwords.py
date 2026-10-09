@@ -10,7 +10,7 @@ _hasher = PasswordHasher()  # Argon2id, t=3, m=64 MiB, p=4
 # nicht verrät, ob ein Benutzername vergeben ist.
 _DUMMY_HASH = _hasher.hash("lotse-dummy-password-for-timing")
 
-MIN_LENGTH = 12
+MIN_LENGTH = 4
 MAX_LENGTH = 256
 
 
@@ -25,7 +25,7 @@ def validate_password(password: str, username: str = "") -> None:
         raise WeakPasswordError(f"Das Passwort darf höchstens {MAX_LENGTH} Zeichen lang sein.")
     if username and username.lower() in password.lower():
         raise WeakPasswordError("Das Passwort darf den Benutzernamen nicht enthalten.")
-    if len(set(password)) < 5:
+    if len(set(password)) < 2:
         raise WeakPasswordError("Das Passwort ist zu gleichförmig.")
 
 

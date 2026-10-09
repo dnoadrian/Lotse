@@ -40,7 +40,7 @@ Richte die Web-App **Lotse** auf diesem Rechner ein, sodass sie unter **https://
    - der lokalen HTTPS-CA von Caddy vertrauen
 
    Sie fragt dabei nach Admin-Rechten. Dann fordert sie zum Anlegen des ersten Benutzers auf:
-   **FRAGEN**, welchen Benutzernamen ich möchte. Das Passwort (mindestens 12 Zeichen) gebe ich selbst ein.
+   **FRAGEN**, welchen Benutzernamen ich möchte. Das Passwort (mindestens 4 Zeichen) gebe ich selbst ein.
    Kannst du keine interaktive Eingabe weiterreichen, gib mir diesen Befehl zum Selbst-Ausführen im Projektordner:
    ```
    docker compose exec backend python -m app.cli create-user <name>

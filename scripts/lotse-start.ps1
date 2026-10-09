@@ -75,7 +75,7 @@ if (-not (Test-Path ".lotse-ca-trusted")) {
 # 6. Erster Benutzer
 $users = docker compose exec -T backend python -m app.cli list-users 2>$null
 if (-not $users) {
-    Say "Lege deinen Lotse-Benutzer an (Passwort mind. 12 Zeichen):"
+    Say "Lege deinen Lotse-Benutzer an (Passwort mind. 4 Zeichen):"
     $name = Read-Host "Benutzername"
     docker compose exec backend python -m app.cli create-user $name
 }

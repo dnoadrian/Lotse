@@ -7,7 +7,7 @@ import { Banner, ErrorBox, PageHeader, Spinner } from "../components/ui";
 import { useAuth } from "../lib/auth";
 import { formatDateTime } from "../lib/format";
 
-const MIN_PASSWORD = 12;
+const MIN_PASSWORD = 4;
 
 function groupSecret(secret: string): string {
   return secret.replace(/(.{4})/g, "$1 ").trim();

@@ -68,7 +68,7 @@ fi
 
 # 6. Erster Benutzer
 if [ -z "$(docker compose exec -T backend python -m app.cli list-users 2>/dev/null)" ]; then
-  say "Lege deinen Lotse-Benutzer an (Passwort mind. 12 Zeichen):"
+  say "Lege deinen Lotse-Benutzer an (Passwort mind. 4 Zeichen):"
   read -rp "Benutzername: " name
   docker compose exec backend python -m app.cli create-user "$name"
 fi

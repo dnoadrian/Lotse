@@ -57,7 +57,7 @@ export function SetupForm({ onDone }: { onDone: (username: string) => void }) {
         Passwort
         <input className="input" type="password" autoComplete="new-password" required maxLength={256} value={password}
           onChange={(e) => setPassword(e.target.value)} />
-        <span className="muted small field-hint">Mindestens 12 Zeichen.</span>
+        <span className="muted small field-hint">Mindestens 4 Zeichen.</span>
       </label>
       <label className="field">
         Passwort wiederholen
@@ -65,7 +65,7 @@ export function SetupForm({ onDone }: { onDone: (username: string) => void }) {
           onChange={(e) => setRepeat(e.target.value)} />
       </label>
       <button type="submit" className="btn btn-primary btn-block"
-        disabled={busy || !token.trim() || username.trim().length < 3 || password.length < 12 || !repeat}>
+        disabled={busy || !token.trim() || username.trim().length < 3 || password.length < 4 || !repeat}>
         {busy ? "Wird angelegt …" : "Benutzer anlegen"}
       </button>
     </form>

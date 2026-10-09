@@ -391,6 +391,14 @@ button:disabled {
   display: flex;
   align-items: stretch;
   min-height: 100vh;
+  /* Spalte der Seitenleiste läuft über die ganze Seitenhöhe weiter (die Leiste selbst ist sticky) */
+  background: linear-gradient(
+    90deg,
+    var(--surface) calc(var(--sidebar-w) - 1px),
+    var(--border) calc(var(--sidebar-w) - 1px),
+    var(--border) var(--sidebar-w),
+    var(--bg) var(--sidebar-w)
+  );
 }
 
 .sidebar {
@@ -2310,6 +2318,7 @@ button:disabled {
 @media (max-width: 760px) {
   .app {
     display: block;
+    background: var(--bg);
   }
 
   .sidebar {

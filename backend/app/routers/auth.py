@@ -65,8 +65,10 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     ip = client_ip(request)
     username = body.username.strip().lower()
 
-    ok, retry = ratelimit.hit(db, f"login:ip:{ip}", s.login_ip_max_attempts, window)
-    if not ok:
+    # Gezählt werden nur Fehlversuche – pro IP (gegen Password-Spraying) und pro Benutzer
+    ip_key = f"login:ip:{ip}"
+    retry = ratelimit.is_blocked(db, ip_key, s.login_ip_max_attempts, window)
+    if retry:
         raise _too_many(retry)
     user_key = f"login:user:{username}"
     retry = ratelimit.is_blocked(db, user_key, s.login_max_attempts, window)
@@ -76,6 +78,7 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     user = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
     if not verify_password(user.password_hash if user else None, body.password) or user is None:
         ratelimit.hit(db, user_key, s.login_max_attempts, window)
+        ratelimit.hit(db, ip_key, s.login_ip_max_attempts, window)
         audit.record(db, "login_failed", user.id if user else None, request)
         raise HTTPException(401, "Benutzername oder Passwort falsch.")
 

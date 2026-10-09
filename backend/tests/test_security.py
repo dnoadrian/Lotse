@@ -182,6 +182,11 @@ def test_brute_force_lockout(client, user):
     assert r.status_code == 429 and int(r.headers["retry-after"]) > 0
 
 
+def test_successful_logins_do_not_count_towards_ip_limit(client, user):
+    for _ in range(25):
+        login(client)
+
+
 def test_ip_rate_limit_against_password_spraying(client, db):
     for i in range(20):
         client.post("/api/auth/login", json={"username": f"user{i}", "password": "irgendwas-langes"}, headers=H)

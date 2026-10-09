@@ -11,13 +11,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from .. import audit
+from .. import audit, scanner
 from ..config import get_settings
 from ..db import get_db
 from ..jdm.catalog import get_catalog
 from ..mail import gmail_client, imap_client
 from ..mail.accounts import credentials, store_credentials
-from ..models import MailAccount, OAuthState, ScanJob
+from ..models import Evidence, MailAccount, OAuthState, ScanJob
 from ..security import ratelimit
 from ..security.crypto import decrypt, encrypt, new_token, token_hash
 from ..security.netguard import HostNotAllowed, normalize_host
@@ -175,7 +175,10 @@ def remove_account(account_id: int, request: Request, auth: Auth = Depends(requi
         except Exception:  # Widerruf ist best effort; das Token wird ohnehin gelöscht
             logging.getLogger("lotse.gmail").warning("Gmail-Token konnte nicht widerrufen werden")
     db.execute(delete(ScanJob).where(ScanJob.account_id == acc.id))
+    db.execute(delete(Evidence).where(Evidence.account_id == acc.id))
     db.delete(acc)
+    db.flush()
+    scanner.recompute(db, auth.user.id)  # Mail-Zahlen dieses Postfachs aus den Diensten entfernen
     db.commit()
     audit.record(db, "account_removed", auth.user.id, request, provider=acc.provider, account_id=account_id)
     return {"ok": True}

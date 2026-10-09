@@ -245,40 +245,50 @@ def _merge(user_id: int, account_id: int, aggs: dict[str, _Agg]) -> None:
                 svc.last_seen = agg.last
         db.flush()
 
-        # Kennzahlen aller Dienste des Nutzers aus den gespeicherten Belegen neu berechnen
-        by_service: dict[int, list[Evidence]] = defaultdict(list)
-        for ev in db.execute(select(Evidence).where(Evidence.user_id == user_id)).scalars():
-            by_service[ev.service_id].append(ev)
-        for svc in existing.values():
-            evs = by_service.get(svc.id, [])
-            src = svc.sources or {}
-            svc.message_count = sum(int(v.get("messages", 0)) for v in src.values())
-            svc.sender_count = sum(int(v.get("senders", 0)) for v in src.values())
-            svc.signal_count = len(evs)
-            counts: dict[str, int] = defaultdict(int)
-            for ev in evs:
-                counts[ev.category] += 1
-            svc.signals = dict(counts)
-            # Stärkste Hinweise je Kategorie kombinieren (gleiche Kategorie zählt nur begrenzt mehrfach)
-            best: dict[str, list[float]] = defaultdict(list)
-            for ev in sorted(evs, key=lambda x: -x.score):
-                if len(best[ev.category]) < 2:
-                    best[ev.category].append(ev.score * (1.0 if not best[ev.category] else 0.5))
-            svc.confidence = combine([s for v in best.values() for s in v]) if evs else 0.0
-            deletions = [ev for ev in evs if ev.category == "deletion"]
-            others = [ev for ev in evs if ev.category != "deletion" and ev.received_at]
-            if deletions:
-                last_del = max((_aware(d.received_at) for d in deletions if d.received_at), default=None)
-                last_other = max((_aware(o.received_at) for o in others), default=None)
-                svc.deletion_detected = last_other is None or (last_del is not None and last_del >= last_other)
-            else:
-                svc.deletion_detected = False
-            if svc.deletion_detected and svc.status == "offen":
-                svc.status = "geloescht"
-                svc.status_changed_at = utcnow()
-            if not src and svc.status == "offen":
-                db.delete(svc)  # keine Belege mehr und nie bearbeitet → verwerfen
+        recompute(db, user_id)
         db.commit()
+
+
+def recompute(db, user_id: int) -> None:
+    """Kennzahlen aller Dienste eines Nutzers aus Belegen und Postfach-Beiträgen neu berechnen."""
+    existing = {s.key: s for s in db.execute(select(Service).where(Service.user_id == user_id)).scalars()}
+    accounts = {str(a) for a in db.execute(select(MailAccount.id).where(MailAccount.user_id == user_id)).scalars()}
+    for svc in existing.values():
+        # Beiträge entfernter Postfächer verwerfen
+        if any(k not in accounts for k in (svc.sources or {})):
+            svc.sources = {k: v for k, v in (svc.sources or {}).items() if k in accounts}
+    by_service: dict[int, list[Evidence]] = defaultdict(list)
+    for ev in db.execute(select(Evidence).where(Evidence.user_id == user_id)).scalars():
+        by_service[ev.service_id].append(ev)
+    for svc in existing.values():
+        evs = by_service.get(svc.id, [])
+        src = svc.sources or {}
+        svc.message_count = sum(int(v.get("messages", 0)) for v in src.values())
+        svc.sender_count = sum(int(v.get("senders", 0)) for v in src.values())
+        svc.signal_count = len(evs)
+        counts: dict[str, int] = defaultdict(int)
+        for ev in evs:
+            counts[ev.category] += 1
+        svc.signals = dict(counts)
+        # Stärkste Hinweise je Kategorie kombinieren (gleiche Kategorie zählt nur begrenzt mehrfach)
+        best: dict[str, list[float]] = defaultdict(list)
+        for ev in sorted(evs, key=lambda x: -x.score):
+            if len(best[ev.category]) < 2:
+                best[ev.category].append(ev.score * (1.0 if not best[ev.category] else 0.5))
+        svc.confidence = combine([s for v in best.values() for s in v]) if evs else 0.0
+        deletions = [ev for ev in evs if ev.category == "deletion"]
+        others = [ev for ev in evs if ev.category != "deletion" and ev.received_at]
+        if deletions:
+            last_del = max((_aware(d.received_at) for d in deletions if d.received_at), default=None)
+            last_other = max((_aware(o.received_at) for o in others), default=None)
+            svc.deletion_detected = last_other is None or (last_del is not None and last_del >= last_other)
+        else:
+            svc.deletion_detected = False
+        if svc.deletion_detected and svc.status == "offen":
+            svc.status = "geloescht"
+            svc.status_changed_at = utcnow()
+        if not src and svc.status == "offen":
+            db.delete(svc)  # keine Belege mehr und nie bearbeitet → verwerfen
 
 
 def _aware(dt: datetime) -> datetime:

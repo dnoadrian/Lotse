@@ -297,3 +297,16 @@ def test_reading_does_not_mark_as_seen(auth, account):
     _, data = c.search(None, "SEEN")
     c.logout()
     assert data[0] == b""
+
+
+def test_removing_account_updates_service_counts(auth, account):
+    auth.post("/api/scans", json={"account_id": account["id"]})
+    assert auth.delete(f"/api/mail-accounts/{account['id']}").status_code == 200
+    # Unbearbeitete Dienste verschwinden, bearbeitete bleiben ohne Mail-Zahlen erhalten
+    services = auth.get("/api/services").json()
+    assert all(s["status"] != "offen" for s in services)
+    again = auth.post("/api/mail-accounts/imap", json={"label": "Neu", "host": HOST, "port": PORT,
+                                                        "username": USER, "password": PASS}).json()
+    auth.post("/api/scans", json={"account_id": again["id"]})
+    gh = next(s for s in auth.get("/api/services").json() if s["name"] == "GitHub")
+    assert gh["message_count"] == 3 and gh["sender_count"] == 2

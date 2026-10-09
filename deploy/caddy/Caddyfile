@@ -1,0 +1,62 @@
+{
+	# Admin-API nur im Container, nicht nach außen
+	admin localhost:2019
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$LOTSE_DOMAIN} {
+	# LOTSE_TLS: E-Mail-Adresse für Let's Encrypt (öffentliche Domain) oder "internal" (eigene CA, z. B. im LAN)
+	tls {$LOTSE_TLS}
+
+	encode zstd gzip
+
+	request_body {
+		max_size 1MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		-Server
+	}
+
+	handle /api/* {
+		# Caddy setzt X-Forwarded-For selbst und ignoriert vom Client gesendete Werte
+		reverse_proxy backend:8000 {
+			header_up -X-Real-IP
+		}
+	}
+
+	handle {
+		root * /srv
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@html not path /assets/*
+		header @html Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format filter {
+			wrap console
+			fields {
+				request>uri regexp \?.*$ ?…
+				request>headers>Cookie delete
+				request>headers>X-Csrf-Token delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}
+
+# HTTP → HTTPS übernimmt Caddy automatisch

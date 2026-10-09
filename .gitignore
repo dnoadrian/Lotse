@@ -1,0 +1,18 @@
+# Geheimnisse
+.env
+*.pem
+!backend/tests/**/*.pem
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+backend/dev.db
+
+# Node
+node_modules/
+frontend/dist/
+
+# Sonstiges
+.DS_Store

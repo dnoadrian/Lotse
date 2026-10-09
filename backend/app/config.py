@@ -1,0 +1,119 @@
+"""Zentrale Konfiguration. Alle Werte kommen aus Umgebungsvariablen (Präfix LOTSE_)."""
+from __future__ import annotations
+
+import base64
+from functools import lru_cache
+from pathlib import Path
+from urllib.parse import urlparse
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="LOTSE_", env_file=None, extra="ignore")
+
+    # Betrieb
+    environment: str = "production"  # production | development | test
+    public_url: str = "https://localhost"
+    database_url: str = "postgresql+psycopg://lotse:lotse@db:5432/lotse"
+
+    # Geheimnisse (Pflicht in Produktion)
+    secret_key: str = Field(default="", description="Mindestens 32 zufällige Bytes, base64")
+    encryption_key: str = Field(default="", description="32 Bytes base64 für AES-256-GCM")
+    encryption_keys_old: str = ""  # kommagetrennte frühere Schlüssel für Rotation
+
+    # Sitzungen
+    session_idle_minutes: int = 30
+    session_absolute_hours: int = 12
+    cookie_secure: bool = True
+
+    # Rate-Limits
+    login_max_attempts: int = 5
+    login_window_minutes: int = 15
+    login_ip_max_attempts: int = 20
+    totp_max_attempts: int = 5
+
+    # Reverse Proxy: Anzahl vertrauenswürdiger Proxys vor der App (Caddy = 1)
+    trusted_proxies: int = 0
+
+    # IMAP / SSRF-Schutz
+    imap_allowed_ports: str = "993"
+    imap_allowed_hosts: str = ""  # Hosts, die auch auf private IPs auflösen dürfen (z. B. eigener Mailcow im LAN)
+    imap_ca_file: str = ""  # optionale zusätzliche CA (PEM) für selbst signierte Mailserver
+    imap_timeout_seconds: int = 30
+
+    # Gmail (optional)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
+    # Daten
+    jdm_data_dir: str = str(BASE_DIR / "data" / "jdm")
+
+    @field_validator("public_url")
+    @classmethod
+    def _strip_slash(cls, v: str) -> str:
+        return v.rstrip("/")
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
+    @property
+    def public_origin(self) -> str:
+        p = urlparse(self.public_url)
+        return f"{p.scheme}://{p.netloc}"
+
+    @property
+    def cookie_name(self) -> str:
+        # __Host- Präfix erzwingt Secure, Path=/ und keine Domain
+        return "__Host-lotse_session" if self.cookie_secure else "lotse_session"
+
+    @property
+    def allowed_ports(self) -> set[int]:
+        return {int(p) for p in self.imap_allowed_ports.split(",") if p.strip()}
+
+    @property
+    def allowed_hosts(self) -> set[str]:
+        return {h.strip().lower().rstrip(".") for h in self.imap_allowed_hosts.split(",") if h.strip()}
+
+    @property
+    def gmail_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def gmail_redirect_uri(self) -> str:
+        return f"{self.public_url}/api/oauth/google/callback"
+
+    def decoded_key(self, value: str) -> bytes:
+        raw = base64.b64decode(value, validate=True)
+        if len(raw) != 32:
+            raise ValueError("Schlüssel muss genau 32 Bytes (base64) lang sein")
+        return raw
+
+    def validate_secrets(self) -> None:
+        """Bricht den Start ab, wenn Pflichtgeheimnisse fehlen oder zu schwach sind."""
+        problems = []
+        try:
+            if len(base64.b64decode(self.secret_key, validate=True)) < 32:
+                problems.append("LOTSE_SECRET_KEY ist kürzer als 32 Bytes")
+        except Exception:
+            problems.append("LOTSE_SECRET_KEY fehlt oder ist kein gültiges base64")
+        try:
+            self.decoded_key(self.encryption_key)
+        except Exception:
+            problems.append("LOTSE_ENCRYPTION_KEY fehlt oder ist nicht 32 Bytes base64")
+        if self.is_production:
+            if not self.public_url.startswith("https://"):
+                problems.append("LOTSE_PUBLIC_URL muss in Produktion mit https:// beginnen")
+            if not self.cookie_secure:
+                problems.append("LOTSE_COOKIE_SECURE darf in Produktion nicht false sein")
+        if problems:
+            raise RuntimeError("Unsichere Konfiguration: " + "; ".join(problems))
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

@@ -3,7 +3,8 @@
 # NUR für automatische Tests – enthält ein Testpostfach mit festem Testpasswort.
 #
 # Voraussetzungen: dovecot-imapd, openssl, Root-Rechte (für /etc/hosts und Dovecot).
-# Ergebnis: imap.quitly.test:10993, Benutzer "test@quitly.test", Passwort "test-passwort-123".
+# Ergebnis: imap.quitly.test:10993, Benutzer "test@quitly.test" (Passwort "test-passwort-123")
+# und "zweit@quitly.test" (Passwort "zweit-passwort-123") für Tests mit mehreren Postfächern.
 # Die CA liegt danach in $DIR/ca.pem (für QUITLY_IMAP_CA_FILE).
 set -euo pipefail
 
@@ -33,7 +34,7 @@ fi
 grep -q " $HOST\$" /etc/hosts || echo "127.0.0.1 $HOST" >> /etc/hosts
 grep -q " falsch.quitly.test\$" /etc/hosts || echo "127.0.0.1 falsch.quitly.test" >> /etc/hosts
 
-echo "test@quitly.test:{PLAIN}test-passwort-123::::::" > users
+printf '%s\n' "test@quitly.test:{PLAIN}test-passwort-123::::::" "zweit@quitly.test:{PLAIN}zweit-passwort-123::::::" > users
 chown -R dovecot:dovecot mail home
 chmod 640 users server.key && chgrp dovecot users server.key
 

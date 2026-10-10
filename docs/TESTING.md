@@ -6,12 +6,12 @@ Stand: 10.10.2026. Alle Ergebnisse wurden tatsächlich ausgeführt; nichts davon
 
 | Bereich | Werkzeug | Ergebnis |
 |---|---|---|
-| Backend: Sicherheit, API, Erkennung, Mail-Ansicht, Favicons, JDM, SSRF | pytest (SQLite) | **202 bestanden** |
-| Dieselben Tests gegen PostgreSQL 16 | pytest mit `QUITLY_TEST_DATABASE_URL` | **202 bestanden** |
+| Backend: Sicherheit, API, Erkennung, Mail-Ansicht, Favicons, JDM, SSRF | pytest (SQLite) | **204 bestanden** |
+| Dieselben Tests gegen PostgreSQL 16 | pytest mit `QUITLY_TEST_DATABASE_URL` | **204 bestanden** |
 | davon IMAP-Integration gegen echten Dovecot-IMAPS-Server | pytest | **32 bestanden** |
 | Frontend: API-Client, Status-/Lösch-Logik, Zuordnungen | vitest | **41 bestanden** |
 | Frontend: Typprüfung | `tsc --noEmit` | fehlerfrei |
-| Ende-zu-Ende im Browser: Backend mit 2 Workern + PostgreSQL 16 + Dovecot, Render-ähnliche Variablen | Playwright/Chromium | **8 bestanden** |
+| Ende-zu-Ende im Browser: Backend mit 2 Workern + PostgreSQL 16 + Dovecot, Render-ähnliche Variablen | Playwright/Chromium | **9 bestanden** (inkl. zwei Postfächer gleichzeitig, Postfach-Filter, Shift-Auswahl) |
 | Statische Sicherheitsanalyse Backend | bandit | **1 Hinweis (niedrig)**: bewusstes `try/except/continue` beim Text-Auslesen kaputter Mail-Teile |
 | Bekannte Schwachstellen Python-Abhängigkeiten | pip-audit | **0** |
 | Bekannte Schwachstellen npm (Frontend, E2E) | npm audit | **0** |

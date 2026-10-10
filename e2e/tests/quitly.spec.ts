@@ -72,6 +72,8 @@ test("Postfach verbinden, scannen und Konten verwalten", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Verbindungen" })).toBeVisible();
   await loaded;
 
+  // Formular erscheint erst, wenn die Postfach-Liste gerendert ist – erst dann zählen
+  await expect(page.getByRole("heading", { name: "Postfach hinzufügen" })).toBeVisible();
   // Vorhandene Test-Postfächer entfernen, damit der Test wiederholbar ist
   const removeButtons = page.locator("section[aria-label='Verbundene Postfächer']").getByRole("button", { name: "Entfernen" });
   for (let n = await removeButtons.count(); n > 0; n--) {
@@ -137,6 +139,50 @@ test("Postfach verbinden, scannen und Konten verwalten", async ({ page }) => {
   await page.reload();
   await page.getByRole("searchbox").first().fill("spoti");
   await expect(page.getByRole("combobox", { name: /Status.*Spotify/ }).first()).toHaveValue("angefragt");
+});
+
+test("Zwei Postfächer gleichzeitig, Konten nach Postfach filtern, Bereich mit Shift auswählen", async ({ page }) => {
+  await login(page);
+  await page.goto("/verbindungen");
+  const card = page.locator("section[aria-label='Verbundene Postfächer']");
+  await expect(card.getByRole("heading", { name: "Testpostfach", exact: true })).toHaveCount(1);
+  const form = page.locator("section", { has: page.getByRole("heading", { name: "Postfach hinzufügen" }) });
+  await form.getByLabel("Bezeichnung").fill("Zweitpostfach");
+  await form.getByLabel("Server").fill("imap.quitly.test");
+  await form.getByLabel("Port").fill("10993");
+  await form.getByLabel("Benutzer").fill("zweit@quitly.test");
+  await form.getByLabel("App-Passwort", { exact: true }).fill("zweit-passwort-123");
+  await form.getByRole("button", { name: "Verbinden & speichern" }).click();
+  await expect(card.getByRole("heading", { name: "Zweitpostfach" })).toHaveCount(1);
+  await expect(card.getByRole("heading", { name: "Testpostfach", exact: true })).toHaveCount(1);
+  const second = card.locator("article, .conn-card", { has: page.getByRole("heading", { name: "Zweitpostfach" }) }).first();
+  await second.getByRole("button", { name: "Scan starten" }).click();
+  const progress = page.locator("section[aria-labelledby='scan-h']");
+  await expect(progress.getByText("Zweitpostfach")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("progressbar", { name: "Scan-Fortschritt Zweitpostfach" })).toBeVisible();
+  await expect(progress.getByText(/4 \/ 4 Mails/)).toBeVisible({ timeout: 45_000 });
+
+  await page.getByRole("link", { name: "Konten" }).first().click();
+  const table = page.getByRole("main");
+  await expect(table.getByText("Tebex").first()).toBeVisible();
+  await page.getByLabel("Postfach").selectOption({ label: "Zweitpostfach (zweit@quitly.test)" });
+  await expect(table.getByText("Tebex").first()).toBeVisible();
+  await expect(table.getByText("Epic Games").first()).toBeVisible();
+  await expect(table.getByText("GitHub").first()).toBeVisible(); // in beiden Postfächern
+  await expect(table.getByText("Spotify")).toHaveCount(0);
+  await page.screenshot({ path: SHOTS + "desktop-konten-postfach.png" });
+
+  // Shift-Klick wählt den ganzen Bereich
+  const boxes = page.getByRole("checkbox", { name: / auswählen$/ });
+  const n = await boxes.count();
+  expect(n).toBeGreaterThanOrEqual(4);
+  await boxes.nth(0).check();
+  await page.keyboard.down("Shift");
+  await boxes.nth(3).check();
+  await page.keyboard.up("Shift");
+  await expect(page.getByText("4 ausgewählt")).toBeVisible();
+  await page.getByLabel("Postfach").selectOption({ label: "Alle Postfächer" });
+  await expect(table.getByText("Spotify").first()).toBeVisible();
 });
 
 test("E-Mails: Auswahl mit Bestätigung löschen und Ergebnis prüfen", async ({ page }) => {

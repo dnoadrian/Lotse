@@ -7,7 +7,7 @@ import {
   useState,
   type MouseEvent,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { errorText } from "../api/client";
 import * as ep from "../api/endpoints";
 import type { Account, AppConfig, Service, ServiceStatus } from "../api/types";
@@ -225,6 +225,40 @@ export function ServicesPage() {
   const [linksOpen, setLinksOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const mailboxF = Number(params.get("postfach")) || null;
+  const shiftDown = useRef(false);
+  const lastToggled = useRef<number | null>(null);
+
+  // Shift gedrückt halten → Bereich auswählen (wie in Mailprogrammen)
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftDown.current = true;
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftDown.current = false;
+    };
+    const blur = () => {
+      shiftDown.current = false;
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  }, []);
+
+  function chooseMailbox(id: number | null) {
+    const next = new URLSearchParams(params);
+    if (id) next.set("postfach", String(id));
+    else next.delete("postfach");
+    setParams(next, { replace: true });
+    setSelected(new Set());
+    lastToggled.current = null;
+  }
 
   const load = useCallback(async () => {
     try {
@@ -260,7 +294,15 @@ export function ServicesPage() {
     }
   }, [scans.finishedVersion, load]);
 
-  const all = services ?? [];
+  const allServices = services ?? [];
+  // Nur die Konten eines Postfachs zeigen (oder alle)
+  const all = useMemo(
+    () =>
+      mailboxF
+        ? allServices.filter((s) => s.sources.some((src) => src.account_id === mailboxF))
+        : allServices,
+    [allServices, mailboxF],
+  );
   const visible = useMemo(
     () =>
       filterServices(all, {
@@ -357,12 +399,28 @@ export function ServicesPage() {
   }
 
   function toggle(id: number) {
+    const from = lastToggled.current;
+    const range = shiftDown.current && from !== null && from !== id;
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const select = !prev.has(id);
+      if (range) {
+        const ids = visible.map((s) => s.id);
+        const a = ids.indexOf(from);
+        const b = ids.indexOf(id);
+        if (a !== -1 && b !== -1) {
+          for (const x of ids.slice(Math.min(a, b), Math.max(a, b) + 1)) {
+            if (select) next.add(x);
+            else next.delete(x);
+          }
+          return next;
+        }
+      }
+      if (select) next.add(id);
+      else next.delete(id);
       return next;
     });
+    lastToggled.current = id;
   }
 
   function toggleAllVisible() {
@@ -577,6 +635,23 @@ export function ServicesPage() {
                 </div>
               </div>
               <div className="toolbar toolbar-secondary">
+                {accountList.length > 1 ? (
+                  <label className="inline-select">
+                    <span>Postfach</span>
+                    <select
+                      value={mailboxF ?? ""}
+                      onChange={(e) => chooseMailbox(Number(e.target.value) || null)}
+                    >
+                      <option value="">Alle Postfächer</option>
+                      {accountList.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.label}
+                          {a.email_address && a.email_address !== a.label ? ` (${a.email_address})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label className="inline-select">
                   <span>Erkennung</span>
                   <select

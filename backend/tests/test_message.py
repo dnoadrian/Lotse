@@ -67,3 +67,34 @@ def test_favicon_fetch_only_to_public_addresses():
             resolve_public("evil.example", 443, resolver=_fake(ip))
     with pytest.raises(HostNotAllowed):
         resolve_public("127.0.0.1", 443)
+
+
+def test_icon_links_prefers_large_png_and_skips_svg():
+    from app.favicons import icon_links
+
+    html = (
+        '<head><link rel="icon" type="image/svg+xml" href="/icon.svg">'
+        '<link rel="shortcut icon" href="/favicon-32.png" sizes="32x32">'
+        "<link rel='apple-touch-icon' href='https://cdn.example.com/apple.png'>"
+        '<link rel="icon" href="javascript:alert(1)"><link rel="stylesheet" href="/a.css"></head>'
+    )
+    assert icon_links(html, "https://www.example.com/") == [
+        "https://cdn.example.com/apple.png", "https://www.example.com/favicon-32.png",
+    ]
+
+
+def test_favicon_fetch_falls_back_to_icon_services(monkeypatch):
+    from app import favicons
+
+    tried = []
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 200
+
+    def fake_image(url):
+        tried.append(url)
+        return (png, "image/png") if "duckduckgo" in url else None
+
+    monkeypatch.setattr(favicons, "_image", fake_image)
+    monkeypatch.setattr(favicons, "_request", lambda *a, **k: None)  # Startseite blockiert (Bot-Schutz)
+    assert favicons.fetch("builtbybit.com") == (png, "image/png")
+    assert tried[:2] == ["https://builtbybit.com/favicon.ico", "https://www.builtbybit.com/favicon.ico"]
+    assert tried[-1] == "https://icons.duckduckgo.com/ip3/builtbybit.com.ico"

@@ -17,6 +17,8 @@ from email.utils import format_datetime
 
 HOST, PORT = "imap.quitly.test", 10993
 USER, PASS = "test@quitly.test", "test-passwort-123"
+# Zweites Testpostfach (mehrere Postfächer gleichzeitig)
+USER2, PASS2 = "zweit@quitly.test", "zweit-passwort-123"
 CA = "/tmp/quitly-test-imap/ca.pem"
 
 INBOX = [
@@ -60,6 +62,12 @@ JUNK = [
     ("Cloudflare", "noreply@notify.cloudflare.com", "[Cloudflare]: Please verify your email address", 600),
     ("Discord", "noreply@discord.com", "Your Discord account is scheduled for deletion", 4),
     ("Canva", "no-reply@canva.com", "Your email address has been changed", 3),
+]
+SECOND = [
+    ("Epic Games", "help@acct.epicgames.com", "Willkommen bei Epic Games", 900),
+    ("Tebex", "no-reply@tebex.io", "Welcome to Tebex", 500),
+    ("BuiltByBit", "noreply@builtbybit.com", "Please confirm your email address", 300),
+    ("GitHub", "noreply@github.com", "[GitHub] Please verify your email address", 200),
 ]
 NEWSLETTER = [
     ("Wetterdienst", "news@wetter-beispiel.at", f"Wochenausblick KW {i}", 7 * i) for i in range(1, 8)
@@ -114,7 +122,17 @@ def main() -> int:
             c.append(folder, None, None, message(*item))
     c.append("INBOX", None, None, html_message(1600))
     c.logout()
-    print(f"{len(INBOX) + len(ARCHIVE) + len(NEWSLETTER) + len(JUNK) + 1} Testnachrichten angelegt.")
+
+    c = imaplib.IMAP4_SSL(HOST, PORT, ssl_context=ssl.create_default_context(cafile=CA))
+    c.login(USER2, PASS2)
+    _, data = c.select("INBOX")
+    if int(data[0]):
+        c.store("1:*", "+FLAGS.SILENT", r"(\Deleted)")
+        c.expunge()
+    for name, addr, subject, days in SECOND:
+        c.append("INBOX", None, None, message(name, addr, subject, days).replace(USER.encode(), USER2.encode()))
+    c.logout()
+    print(f"{len(INBOX) + len(ARCHIVE) + len(NEWSLETTER) + len(JUNK) + 1 + len(SECOND)} Testnachrichten angelegt.")
     return 0
 
 

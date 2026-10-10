@@ -2711,18 +2711,31 @@ h3 {
   border-color: transparent;
 }
 
-/* Auswahl-Leiste: schwebende Graphit-Pille */
+/* Auswahl-Leiste: schwebt fest am unteren Rand – nichts verrutscht beim Auswählen */
+.main {
+  padding-bottom: 120px;
+}
+
 .bulk-bar {
-  position: sticky;
-  bottom: 16px;
-  z-index: 20;
+  position: fixed;
+  left: calc(var(--sidebar-w) + (100vw - var(--sidebar-w)) / 2);
+  bottom: 24px;
+  z-index: 40;
+  width: max-content;
+  max-width: calc(100vw - var(--sidebar-w) - 32px);
+  transform: translateX(-50%);
   padding: 8px 8px 8px 18px;
   border: 0;
   border-radius: 999px;
   background: var(--primary-bg);
   color: var(--primary-fg);
   box-shadow: var(--shadow);
-  animation: q-up 0.4s var(--ease) both;
+  animation: q-up-center 0.4s var(--ease) both;
+}
+
+@keyframes q-up-center {
+  from { opacity: 0; transform: translate(-50%, 16px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 
 .bulk-bar .bulk-count::before {
@@ -3339,7 +3352,13 @@ h3 {
     justify-content: flex-end;
   }
 
+  .app .main {
+    padding-bottom: calc(200px + env(safe-area-inset-bottom));
+  }
+
   .bulk-bar {
+    left: 50%;
+    max-width: calc(100vw - 24px);
     border-radius: 22px;
     bottom: calc(84px + env(safe-area-inset-bottom));
   }

@@ -60,8 +60,14 @@ describe("Status und Aufwand", () => {
     expect(difficultyMeta("easy")).toEqual({ label: "Einfach", tone: "green" });
     expect(difficultyMeta("medium")).toEqual({ label: "Mittel", tone: "text" });
     expect(difficultyMeta("hard")).toEqual({ label: "Schwer", tone: "red" });
-    expect(difficultyMeta("impossible")).toEqual({ label: "Unmöglich", tone: "red-strong" });
-    expect(difficultyMeta("limited")).toEqual({ label: "Eingeschränkt", tone: "muted" });
+    expect(difficultyMeta("impossible")).toEqual({
+      label: "Unmöglich",
+      tone: "red-strong",
+    });
+    expect(difficultyMeta("limited")).toEqual({
+      label: "Eingeschränkt",
+      tone: "muted",
+    });
     expect(difficultyMeta(null).label).toBe("—");
     expect(difficultyMeta("seltsam").tone).toBe("muted");
   });
@@ -78,8 +84,12 @@ describe("Status und Aufwand", () => {
 
 describe("Signale, Kategorien, Ordner", () => {
   it("fasst Signale in fester Reihenfolge zusammen", () => {
-    expect(signalSummary({ verification: 2, welcome: 1 })).toBe("Willkommen, Bestätigung");
-    expect(signalSummary({ deletion: 1, notice: 3, registration: 0 })).toBe("Löschung, Hinweis");
+    expect(signalSummary({ verification: 2, welcome: 1 })).toBe(
+      "Willkommen, Bestätigung",
+    );
+    expect(signalSummary({ deletion: 1, notice: 3, registration: 0 })).toBe(
+      "Hinweis, Löschung",
+    );
     expect(signalSummary({})).toBe("Keine Signale");
   });
 
@@ -91,10 +101,16 @@ describe("Signale, Kategorien, Ordner", () => {
   });
 
   it("benennt Spezialordner deutsch", () => {
-    expect(folderDisplayName({ name: "INBOX", special: "inbox" })).toBe("Posteingang");
+    expect(folderDisplayName({ name: "INBOX", special: "inbox" })).toBe(
+      "Posteingang",
+    );
     expect(folderDisplayName({ name: "Junk", special: "junk" })).toBe("Spam");
-    expect(folderDisplayName({ name: "Deleted Items", special: "trash" })).toBe("Papierkorb");
-    expect(folderDisplayName({ name: "Rechnungen", special: "" })).toBe("Rechnungen");
+    expect(folderDisplayName({ name: "Deleted Items", special: "trash" })).toBe(
+      "Papierkorb",
+    );
+    expect(folderDisplayName({ name: "Rechnungen", special: "" })).toBe(
+      "Rechnungen",
+    );
   });
 
   it("zeigt zusammengeführte Absender nur ab zwei", () => {
@@ -105,26 +121,67 @@ describe("Signale, Kategorien, Ordner", () => {
 
 describe("Filter", () => {
   const list = [
-    svc({ id: 1, name: "GitHub", domains: ["github.com"], jdm: jdm("https://github.com/settings/admin") }),
-    svc({ id: 2, name: "Bäckerei Muster", domains: ["baeckerei-muster.at"], quality: "niedrig", status: "angefragt" }),
-    svc({ id: 3, name: "Spotify", domains: ["spotify.com"], jdm: jdm(null), quality: "mittel", status: "geloescht" }),
+    svc({
+      id: 1,
+      name: "GitHub",
+      domains: ["github.com"],
+      jdm: jdm("https://github.com/settings/admin"),
+    }),
+    svc({
+      id: 2,
+      name: "Bäckerei Muster",
+      domains: ["baeckerei-muster.at"],
+      quality: "niedrig",
+      status: "angefragt",
+    }),
+    svc({
+      id: 3,
+      name: "Spotify",
+      domains: ["spotify.com"],
+      jdm: jdm(null),
+      quality: "mittel",
+      status: "geloescht",
+    }),
   ];
-  const base = { query: "", status: "alle" as const, quality: "alle" as const, link: "alle" as const };
+  const base = {
+    query: "",
+    status: "alle" as const,
+    quality: "alle" as const,
+    link: "alle" as const,
+  };
 
   it("sucht in Name und Domain", () => {
-    expect(filterServices(list, { ...base, query: "muster" }).map((s) => s.id)).toEqual([2]);
-    expect(filterServices(list, { ...base, query: "SPOTIFY.com" }).map((s) => s.id)).toEqual([3]);
+    expect(
+      filterServices(list, { ...base, query: "muster" }).map((s) => s.id),
+    ).toEqual([2]);
+    expect(
+      filterServices(list, { ...base, query: "SPOTIFY.com" }).map((s) => s.id),
+    ).toEqual([3]);
   });
 
   it("filtert nach Status, Qualität und Löschlink", () => {
-    expect(filterServices(list, { ...base, status: "angefragt" }).map((s) => s.id)).toEqual([2]);
-    expect(filterServices(list, { ...base, quality: "mittel" }).map((s) => s.id)).toEqual([3]);
-    expect(filterServices(list, { ...base, link: "mit" }).map((s) => s.id)).toEqual([1]);
-    expect(filterServices(list, { ...base, link: "ohne" }).map((s) => s.id)).toEqual([2, 3]);
+    expect(
+      filterServices(list, { ...base, status: "angefragt" }).map((s) => s.id),
+    ).toEqual([2]);
+    expect(
+      filterServices(list, { ...base, quality: "mittel" }).map((s) => s.id),
+    ).toEqual([3]);
+    expect(
+      filterServices(list, { ...base, link: "mit" }).map((s) => s.id),
+    ).toEqual([1]);
+    expect(
+      filterServices(list, { ...base, link: "ohne" }).map((s) => s.id),
+    ).toEqual([2, 3]);
   });
 
   it("zählt Status", () => {
-    expect(statusCounts(list)).toEqual({ alle: 3, offen: 1, angefragt: 1, geloescht: 1, behalten: 0 });
+    expect(statusCounts(list)).toEqual({
+      alle: 3,
+      offen: 1,
+      angefragt: 1,
+      geloescht: 1,
+      behalten: 0,
+    });
   });
 });
 
@@ -138,11 +195,24 @@ describe("Protokoll", () => {
   it("fasst Details zusammen", () => {
     expect(
       auditDetailSummary(
-        { account_id: 2, provider: "imap", mode: "all", permanent: false, requested: 5, deleted: 5, failed: 0, verified: true },
+        {
+          account_id: 2,
+          provider: "imap",
+          mode: "all",
+          permanent: false,
+          requested: 5,
+          deleted: 5,
+          failed: 0,
+          verified: true,
+        },
         { 2: "Mailcow" },
       ),
-    ).toBe("Postfach „Mailcow“ · IMAP · ganzer Ordner · Papierkorb · 5 von 5 gelöscht · überprüft");
-    expect(auditDetailSummary({ count: 3, status: "geloescht" })).toBe("Status: Gelöscht · 3 Dienste");
+    ).toBe(
+      "Postfach „Mailcow“ · IMAP · ganzer Ordner · Papierkorb · 5 von 5 gelöscht · überprüft",
+    );
+    expect(auditDetailSummary({ count: 3, status: "geloescht" })).toBe(
+      "Status: Gelöscht · 3 Dienste",
+    );
     expect(auditDetailSummary(null)).toBe("");
     expect(auditDetailSummary({ foo: "bar" })).toBe("foo: bar");
   });

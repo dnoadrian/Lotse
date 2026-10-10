@@ -1,4 +1,4 @@
-// „E-Mails“: Ordner, Nachrichtenliste und Löschen (Mail.dc.html).
+// „E-Mails“: Ordner, Nachrichtenliste, Lesen und Löschen.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { errorText } from "../api/client";
@@ -21,6 +21,7 @@ import {
 } from "../lib/mappings";
 import { pageTokens, totalPages } from "../lib/pagination";
 import { DeleteDialog, type DeleteDialogPlan } from "./DeleteDialog";
+import { MailReader } from "./MailReader";
 
 const PAGE_SIZE = 50;
 
@@ -56,6 +57,9 @@ export function EmailsPage() {
   const [listError, setListError] = useState<string | null>(null);
   const [listLoading, setListLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const openUid = params.get("mail");
+  const wantedFolder = useRef(params.get("ordner"));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [plan, setPlan] = useState<DeleteDialogPlan | null>(null);
   const [result, setResult] = useState<ResultSummary | null>(null);
@@ -76,6 +80,15 @@ export function EmailsPage() {
       .catch((err) => setAccountsError(errorText(err)));
   }, []);
 
+  // Suche läuft auf dem Server (ganzer Ordner, auch im Text) – kurz warten, bis fertig getippt
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setQuery(search.trim());
+      setPage(1);
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [search]);
+
   // Ordner laden
   const loadFolders = useCallback(
     async (keepSelection: boolean) => {
@@ -88,6 +101,9 @@ export function EmailsPage() {
         setFolderId((cur) => {
           if (keepSelection && cur && list.some((f) => f.id === cur))
             return cur;
+          const wanted = wantedFolder.current;
+          wantedFolder.current = null;
+          if (wanted && list.some((f) => f.id === wanted)) return wanted;
           return (
             (list.find((f) => f.special === "inbox") ?? list[0])?.id ?? null
           );
@@ -122,6 +138,7 @@ export function EmailsPage() {
         page,
         page_size: PAGE_SIZE,
         only_registration: onlyReg,
+        q: query,
       },
       ctrl.signal,
     )
@@ -129,7 +146,12 @@ export function EmailsPage() {
         if (ctrl.signal.aborted) return;
         setListing(res);
         setItems(res.items);
-        setSelected(new Set());
+        setSelected(
+          (prev) =>
+            new Set(
+              [...prev].filter((id) => res.items.some((m) => m.id === id)),
+            ),
+        );
         // Seite hinter dem Ende (z. B. nach dem Löschen) → letzte Seite
         if (res.items.length === 0 && page > 1 && res.total > 0) {
           setPage(totalPages(res.total, res.page_size));
@@ -145,7 +167,7 @@ export function EmailsPage() {
         if (!ctrl.signal.aborted) setListLoading(false);
       });
     return () => ctrl.abort();
-  }, [account, folderId, folderReady, onlyReg, page, reloadKey]);
+  }, [account, folderId, folderReady, onlyReg, page, query, reloadKey]);
 
   function reloadAll() {
     setReloadKey((k) => k + 1);
@@ -160,26 +182,28 @@ export function EmailsPage() {
     setConflict(null);
     setPage(1);
     setSearch("");
+    setQuery("");
+  }
+
+  function openMessage(uid: string | null) {
+    const next = new URLSearchParams(params);
+    if (uid) next.set("mail", uid);
+    else next.delete("mail");
+    if (uid && folderId) next.set("ordner", folderId);
+    setParams(next, { replace: !uid });
   }
 
   function chooseFolder(id: string) {
     setFolderId(id);
+    openMessage(null);
     setPage(1);
     setSelected(new Set());
     setResult(null);
     setConflict(null);
   }
 
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (m) =>
-        (m.from_name ?? "").toLowerCase().includes(q) ||
-        (m.from_addr ?? "").toLowerCase().includes(q) ||
-        (m.subject ?? "").toLowerCase().includes(q),
-    );
-  }, [items, search]);
+  const visible = items;
+  const readerFolder = params.get("ordner") ?? folderId;
 
   const selectedVisible = visible.filter((m) => selected.has(m.id));
   const allChecked =
@@ -442,12 +466,11 @@ export function EmailsPage() {
                 strokeWidth={2}
                 className="muted-icon"
               />
-              <span className="sr-only">
-                Nachrichten auf dieser Seite durchsuchen
-              </span>
+              <span className="sr-only">Nachrichten im Ordner durchsuchen</span>
               <input
                 type="search"
-                placeholder="Absender oder Betreff …"
+                maxLength={100}
+                placeholder="Suchen in Absender, Betreff und Text …"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -529,7 +552,7 @@ export function EmailsPage() {
                 return (
                   <div
                     key={m.id}
-                    className={`mail-row${checked ? " selected" : ""}`}
+                    className={`mail-row${checked ? " selected" : ""}${m.seen ? "" : " unread"}${openUid === m.id ? " open" : ""}`}
                   >
                     <label className="check-cell mail-check">
                       <input
@@ -539,15 +562,18 @@ export function EmailsPage() {
                         aria-label={`${name}: ${m.subject || "(kein Betreff)"} auswählen`}
                       />
                     </label>
-                    <span
-                      className="mail-from truncate"
+                    <button
+                      type="button"
+                      className="mail-open"
+                      onClick={() => openMessage(m.id)}
                       title={m.from_addr || undefined}
+                      aria-label={`Nachricht von ${name} öffnen: ${m.subject || "(kein Betreff)"}`}
                     >
-                      {name}
-                    </span>
-                    <span className="mail-subject muted truncate">
-                      {m.subject || "(kein Betreff)"}
-                    </span>
+                      <span className="mail-from truncate">{name}</span>
+                      <span className="mail-subject truncate">
+                        {m.subject || "(kein Betreff)"}
+                      </span>
+                    </button>
                     <span className="mail-cat">
                       {cat ? (
                         <span className="badge badge-blue">{cat}</span>
@@ -569,8 +595,8 @@ export function EmailsPage() {
               })}
               {!listLoading && listing && visible.length === 0 ? (
                 <div className="empty-row">
-                  {items.length > 0
-                    ? "Keine Nachricht auf dieser Seite passt zur Suche."
+                  {query
+                    ? "Keine Nachricht in diesem Ordner passt zur Suche."
                     : onlyReg
                       ? "Keine Registrierungs-Mails in diesem Ordner."
                       : "Dieser Ordner ist leer."}
@@ -633,13 +659,46 @@ export function EmailsPage() {
           ) : null}
 
           <p className="muted small no-margin">
-            Quitly zeigt nur Absender, Betreff und Datum. Mail-Inhalte werden
-            weder gespeichert noch protokolliert. Die Suche filtert nur die
-            geladene Seite.
+            Mail-Inhalte werden nur zum Anzeigen geladen – nie gespeichert oder
+            protokolliert. HTML-Mails laufen in einer abgeschotteten Ansicht
+            ohne Skripte; externe Bilder werden erst auf Wunsch geladen.
           </p>
         </section>
       </div>
 
+      {openUid && readerFolder && folders ? (
+        <MailReader
+          account={account}
+          folder={readerFolder}
+          uid={openUid}
+          folders={folders}
+          onClose={() => openMessage(null)}
+          onSeenChange={(id, seen) =>
+            setItems((prev) =>
+              prev.map((m) => (m.id === id ? { ...m, seen } : m)),
+            )
+          }
+          onMoved={(id) => {
+            setItems((prev) => prev.filter((m) => m.id !== id));
+            reloadAll();
+          }}
+          onDelete={(id) => {
+            const m = items.find((x) => x.id === id);
+            openMessage(null);
+            setPlan({
+              folder: readerFolder,
+              mode: "selected",
+              ids: [id],
+              count: 1,
+              uidvalidity: readerFolder === folderId ? uidvalidity : "",
+              title: "1 Nachricht löschen?",
+              body: m
+                ? `${senderName(m)} · „${m.subject || "(kein Betreff)"}“`
+                : "Die geöffnete Nachricht wird gelöscht.",
+            });
+          }}
+        />
+      ) : null}
       {plan && account ? (
         <DeleteDialog
           plan={plan}

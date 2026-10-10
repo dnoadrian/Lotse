@@ -32,7 +32,6 @@ INBOX = [
     ("Duolingo", "hello@duolingo.com", "Willkommen bei Duolingo!", 900),
     ("Strava", "no-reply@strava.com", "Welcome to Strava", 700),
     ("Twitch", "no-reply@twitch.tv", "Verify your Twitch account", 1200),
-    ("Netflix", "info@account.netflix.com", "Willkommen bei Netflix", 1600),
     ("Airbnb", "automated@airbnb.com", "Bitte bestätige deine E-Mail-Adresse", 1400),
     ("eBay", "ebay@ebay.com", "Willkommen bei eBay", 2900),
     ("Zalando", "info@service-mail.zalando.de", "Willkommen bei Zalando", 2000),
@@ -56,6 +55,12 @@ ARCHIVE = [
     ("Udemy", "no-reply@e.udemy.com", "Welcome to Udemy!", 2100),
     ("Steam", "noreply@steampowered.com", "Neues Steam-Konto – E-Mail-Adresse bestätigen", 3800),
 ]
+# Registrierungs-Mails landen oft im Spam – Quitly durchsucht auch diesen Ordner
+JUNK = [
+    ("Cloudflare", "noreply@notify.cloudflare.com", "[Cloudflare]: Please verify your email address", 600),
+    ("Discord", "noreply@discord.com", "Your Discord account is scheduled for deletion", 4),
+    ("Canva", "no-reply@canva.com", "Your email address has been changed", 3),
+]
 NEWSLETTER = [
     ("Wetterdienst", "news@wetter-beispiel.at", f"Wochenausblick KW {i}", 7 * i) for i in range(1, 8)
 ]
@@ -67,6 +72,23 @@ def message(name: str, addr: str, subject: str, days: int) -> bytes:
     return (f"From: {sender}\r\nTo: {USER}\r\nSubject: {Header(subject, 'utf-8').encode()}\r\nDate: {date}\r\n"
             f"Message-ID: <{time.time_ns()}@seed.quitly.test>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
             f"Erfundene Testnachricht.\r\n").encode()
+
+
+def html_message(days: int) -> bytes:
+    """HTML-Mail mit Skript, Tracking-Pixel und Abmelde-Link – zeigt, dass Quitly sie sicher darstellt."""
+    date = format_datetime(datetime.now(timezone.utc) - timedelta(days=days))
+    html = ("<html><head><script>alert('x')</script></head><body style=\"font-family:Arial\">"
+            "<h1 style=\"color:#e50914\">Willkommen bei Netflix</h1>"
+            "<p>Schön, dass du da bist. Dein Konto ist jetzt aktiv.</p>"
+            "<img src=\"https://tracker.example/pixel.gif\" width=\"1\" height=\"1\" onerror=\"alert(1)\">"
+            "<p><a href=\"https://help.netflix.com/\">Hilfe-Center</a></p></body></html>")
+    return (f"From: Netflix <info@account.netflix.com>\r\nTo: {USER}\r\nSubject: Willkommen bei Netflix\r\n"
+            f"Date: {date}\r\nMessage-ID: <{time.time_ns()}@seed.quitly.test>\r\nMIME-Version: 1.0\r\n"
+            "List-Unsubscribe: <https://www.netflix.com/unsubscribe>\r\n"
+            "Content-Type: multipart/alternative; boundary=b1\r\n\r\n"
+            "--b1\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+            "Willkommen bei Netflix. Schön, dass du da bist. Dein Konto ist jetzt aktiv.\r\n"
+            "--b1\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" + html + "\r\n--b1--\r\n").encode()
 
 
 def main() -> int:
@@ -87,11 +109,12 @@ def main() -> int:
             c.expunge()
     c.create('"Archiv"')
     c.create('"Newsletter"')
-    for folder, items in (("INBOX", INBOX), ('"Archiv"', ARCHIVE), ('"Newsletter"', NEWSLETTER)):
+    for folder, items in (("INBOX", INBOX), ('"Archiv"', ARCHIVE), ('"Newsletter"', NEWSLETTER), ("Junk", JUNK)):
         for item in items:
             c.append(folder, None, None, message(*item))
+    c.append("INBOX", None, None, html_message(1600))
     c.logout()
-    print(f"{len(INBOX) + len(ARCHIVE) + len(NEWSLETTER)} Testnachrichten angelegt.")
+    print(f"{len(INBOX) + len(ARCHIVE) + len(NEWSLETTER) + len(JUNK) + 1} Testnachrichten angelegt.")
     return 0
 
 

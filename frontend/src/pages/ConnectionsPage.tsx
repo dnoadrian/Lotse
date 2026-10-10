@@ -13,6 +13,7 @@ import * as ep from "../api/endpoints";
 import type { Account, AppConfig } from "../api/types";
 import { Icon } from "../components/Icons";
 import { Modal } from "../components/Modal";
+import { PasswordInput } from "../components/PasswordInput";
 import { ScanProgressList } from "../components/ScanProgress";
 import { Banner, ErrorBox, PageHeader, Spinner } from "../components/ui";
 import { formatDateTime } from "../lib/format";
@@ -60,7 +61,7 @@ function ImapFields({
           required
           value={values.label}
           onChange={set("label")}
-          placeholder="Mailcow"
+          placeholder="z. B. Privat"
         />
       </label>
       <div className="grid-host">
@@ -122,11 +123,11 @@ function ImapFields({
           placeholder="name@example.org"
         />
       </label>
-      <label className="field">
-        App-Passwort
-        <input
+      <div className="field">
+        <label htmlFor={`${idPrefix}-pw`}>App-Passwort</label>
+        <PasswordInput
+          id={`${idPrefix}-pw`}
           className="input"
-          type="password"
           name="password"
           autoComplete="new-password"
           maxLength={1024}
@@ -136,7 +137,7 @@ function ImapFields({
         {passwordHint ? (
           <span className="muted small field-hint">{passwordHint}</span>
         ) : null}
-      </label>
+      </div>
     </>
   );
 }
@@ -155,7 +156,7 @@ function AddImapCard({
 }) {
   const idPrefix = useId();
   const empty: ImapFormValues = {
-    label: "Mailcow",
+    label: "Postfach",
     host: "",
     port: String(allowedPorts[0] ?? 993),
     username: "",
@@ -204,7 +205,7 @@ function AddImapCard({
     <section aria-labelledby={`${idPrefix}-h`} className="card conn-card">
       <div className="conn-head">
         <div className="stack-2">
-          <h2 id={`${idPrefix}-h`}>Mailcow / IMAP hinzufügen</h2>
+          <h2 id={`${idPrefix}-h`}>Postfach hinzufügen</h2>
           <span className="muted small">IMAP über TLS</span>
         </div>
       </div>
@@ -256,7 +257,8 @@ function ImapHelpCard() {
       <div className="stack-2">
         <h2 id={`${idPrefix}-h`}>Was trage ich ein?</h2>
         <span className="muted small">
-          Die Daten findest du in Mailcow unter „Mailbox“.
+          Die Daten findest du bei deinem Mail-Anbieter, meist unter „IMAP“ oder
+          „E-Mail-Programme“.
         </span>
       </div>
       <dl className="help-list">
@@ -286,9 +288,9 @@ function ImapHelpCard() {
         <div>
           <dt>App-Passwort</dt>
           <dd>
-            Am besten ein eigenes App-Passwort mit IMAP-Recht (Mailcow → Mailbox
-            → App-Passwörter). So kannst du den Zugang jederzeit widerrufen,
-            ohne dein Hauptpasswort zu ändern.
+            Dein Passwort oder – falls dein Anbieter das anbietet – ein eigenes
+            App-Passwort mit IMAP-Recht. Ein App-Passwort kannst du jederzeit
+            widerrufen, ohne dein Hauptpasswort zu ändern.
           </dd>
         </div>
       </dl>
@@ -394,7 +396,7 @@ function AccountCard({
           <h2 id={`${idPrefix}-h`} className="truncate">
             {account.label}
           </h2>
-          <span className="muted small">Mailcow · IMAP über TLS</span>
+          <span className="muted small">IMAP über TLS</span>
         </div>
         {account.status === "ok" ? (
           <span className="pill pill-green">

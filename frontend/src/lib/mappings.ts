@@ -1,5 +1,12 @@
 // Zuordnungen von API-Werten zu deutschen Bezeichnungen und Farbklassen.
-import type { Account, Folder, Quality, Service, ServiceStatus, SignalKey } from "../api/types";
+import type {
+  Account,
+  Folder,
+  Quality,
+  Service,
+  ServiceStatus,
+  SignalKey,
+} from "../api/types";
 
 // ---------------------------------------------------------------- Status
 
@@ -8,7 +15,12 @@ export interface StatusMeta {
   label: string;
 }
 
-export const STATUS_ORDER: ServiceStatus[] = ["offen", "angefragt", "geloescht", "behalten"];
+export const STATUS_ORDER: ServiceStatus[] = [
+  "offen",
+  "angefragt",
+  "geloescht",
+  "behalten",
+];
 
 export const STATUS_META: Record<ServiceStatus, StatusMeta> = {
   offen: { value: "offen", label: "Offen" },
@@ -42,7 +54,9 @@ const DIFFICULTY: Record<string, DifficultyMeta> = {
   limited: { label: "Eingeschränkt", tone: "muted" },
 };
 
-export function difficultyMeta(difficulty: string | null | undefined): DifficultyMeta {
+export function difficultyMeta(
+  difficulty: string | null | undefined,
+): DifficultyMeta {
   if (!difficulty) return { label: "—", tone: "muted" };
   return DIFFICULTY[difficulty] ?? { label: "Unbekannt", tone: "muted" };
 }
@@ -72,14 +86,36 @@ export function confidencePercent(confidence: number): number {
 
 // ---------------------------------------------------------------- Signale / Kategorien
 
-export const SIGNAL_ORDER: SignalKey[] = ["welcome", "verification", "registration", "deletion", "notice"];
+export const SIGNAL_ORDER: SignalKey[] = [
+  "welcome",
+  "verification",
+  "registration",
+  "email_new",
+  "security",
+  "subscription",
+  "order",
+  "account",
+  "notice",
+  "deletion_request",
+  "email_change",
+  "deletion",
+];
 
 const SIGNAL_LABELS: Record<SignalKey, string> = {
   welcome: "Willkommen",
   verification: "Bestätigung",
   registration: "Registrierung",
   deletion: "Löschung",
+  deletion_request: "Löschanfrage",
+  email_change: "E-Mail geändert",
+  email_new: "Neue E-Mail-Adresse",
+  security: "Sicherheit/Anmeldung",
+  subscription: "Abo/Zahlung",
+  order: "Bestellung/Rechnung",
+  account: "Konto-Hinweis",
   notice: "Hinweis",
+  newsletter: "Newsletter",
+  contact: "Mail erhalten",
 };
 
 export function signalLabel(key: string): string {
@@ -87,21 +123,24 @@ export function signalLabel(key: string): string {
 }
 
 /** „Willkommen, Bestätigung“ – nur vorhandene Signale in fester Reihenfolge. */
-export function signalSummary(signals: Partial<Record<string, number>> | null | undefined): string {
+export function signalSummary(
+  signals: Partial<Record<string, number>> | null | undefined,
+): string {
   if (!signals) return "Keine Signale";
-  const parts = SIGNAL_ORDER.filter((k) => (signals[k] ?? 0) > 0).map((k) => SIGNAL_LABELS[k]);
+  const parts = SIGNAL_ORDER.filter((k) => (signals[k] ?? 0) > 0).map(
+    (k) => SIGNAL_LABELS[k],
+  );
   return parts.length ? parts.join(", ") : "Keine Signale";
 }
 
 const CATEGORY_LABELS: Record<SignalKey, string> = {
-  welcome: "Willkommen",
-  verification: "Bestätigung",
-  registration: "Registrierung",
+  ...SIGNAL_LABELS,
   deletion: "Kontolöschung",
-  notice: "Hinweis",
 };
 
-export function categoryLabel(category: string | null | undefined): string | null {
+export function categoryLabel(
+  category: string | null | undefined,
+): string | null {
   if (!category) return null;
   return CATEGORY_LABELS[category as SignalKey] ?? null;
 }
@@ -117,7 +156,9 @@ const FOLDER_NAMES: Record<string, string> = {
   trash: "Papierkorb",
 };
 
-export function folderDisplayName(folder: Pick<Folder, "name" | "special">): string {
+export function folderDisplayName(
+  folder: Pick<Folder, "name" | "special">,
+): string {
   return FOLDER_NAMES[folder.special] ?? folder.name;
 }
 
@@ -128,10 +169,14 @@ export function providerLabel(provider: string): string {
   return provider;
 }
 
-export function accountOptionLabel(a: Pick<Account, "provider" | "label" | "email_address">): string {
-  const kind = "Mailcow";
-  const addr = a.email_address && a.email_address !== a.label ? ` (${a.email_address})` : "";
-  return `${kind} · ${a.label}${addr}`;
+export function accountOptionLabel(
+  a: Pick<Account, "provider" | "label" | "email_address">,
+): string {
+  const addr =
+    a.email_address && a.email_address !== a.label
+      ? ` (${a.email_address})`
+      : "";
+  return `${a.label}${addr}`;
 }
 
 // ---------------------------------------------------------------- Dienste
@@ -160,7 +205,10 @@ export function hasDeletionLink(s: Pick<Service, "jdm">): boolean {
   return !!s.jdm && !!s.jdm.url;
 }
 
-export function filterServices(services: Service[], f: ServiceFilter): Service[] {
+export function filterServices(
+  services: Service[],
+  f: ServiceFilter,
+): Service[] {
   const q = f.query.trim().toLowerCase();
   return services.filter((s) => {
     if (f.status !== "alle" && s.status !== f.status) return false;
@@ -173,9 +221,18 @@ export function filterServices(services: Service[], f: ServiceFilter): Service[]
   });
 }
 
-export function statusCounts(services: Service[]): Record<"alle" | ServiceStatus, number> {
-  const counts = { alle: services.length, offen: 0, angefragt: 0, geloescht: 0, behalten: 0 };
-  for (const s of services) if (isServiceStatus(s.status)) counts[s.status] += 1;
+export function statusCounts(
+  services: Service[],
+): Record<"alle" | ServiceStatus, number> {
+  const counts = {
+    alle: services.length,
+    offen: 0,
+    angefragt: 0,
+    geloescht: 0,
+    behalten: 0,
+  };
+  for (const s of services)
+    if (isServiceStatus(s.status)) counts[s.status] += 1;
   return counts;
 }
 
@@ -205,7 +262,11 @@ export function auditActionLabel(action: string): string {
 }
 
 export function isAuditWarning(action: string): boolean {
-  return action === "login_failed" || action === "totp_failed" || action === "mail_delete_failed";
+  return (
+    action === "login_failed" ||
+    action === "totp_failed" ||
+    action === "mail_delete_failed"
+  );
 }
 
 const DELETE_MODE_LABELS: Record<string, string> = {
@@ -242,30 +303,40 @@ export function auditDetailSummary(
   const provider = take("provider");
   const accountId = take("account_id");
   if (accountId !== undefined) {
-    const name = typeof accountId === "number" ? accountNames[accountId] : undefined;
+    const name =
+      typeof accountId === "number" ? accountNames[accountId] : undefined;
     parts.push(name ? `Postfach „${name}“` : `Postfach #${scalar(accountId)}`);
   }
   if (provider !== undefined) parts.push(providerLabel(scalar(provider)));
 
   const mode = take("mode");
-  if (mode !== undefined) parts.push(DELETE_MODE_LABELS[scalar(mode)] ?? scalar(mode));
+  if (mode !== undefined)
+    parts.push(DELETE_MODE_LABELS[scalar(mode)] ?? scalar(mode));
   const permanent = take("permanent");
-  if (permanent !== undefined) parts.push(permanent ? "endgültig" : "Papierkorb");
+  if (permanent !== undefined)
+    parts.push(permanent ? "endgültig" : "Papierkorb");
 
   const requested = take("requested");
   const deleted = take("deleted");
   if (deleted !== undefined) {
-    parts.push(requested !== undefined ? `${scalar(deleted)} von ${scalar(requested)} gelöscht` : `${scalar(deleted)} gelöscht`);
+    parts.push(
+      requested !== undefined
+        ? `${scalar(deleted)} von ${scalar(requested)} gelöscht`
+        : `${scalar(deleted)} gelöscht`,
+    );
   } else if (requested !== undefined) {
     parts.push(`${scalar(requested)} angefordert`);
   }
   const failed = take("failed");
-  if (failed !== undefined && Number(failed) > 0) parts.push(`${scalar(failed)} fehlgeschlagen`);
+  if (failed !== undefined && Number(failed) > 0)
+    parts.push(`${scalar(failed)} fehlgeschlagen`);
   const verified = take("verified");
-  if (verified !== undefined) parts.push(verified ? "überprüft" : "nicht überprüft");
+  if (verified !== undefined)
+    parts.push(verified ? "überprüft" : "nicht überprüft");
 
   const status = take("status");
-  if (status !== undefined) parts.push(`Status: ${statusLabel(scalar(status))}`);
+  if (status !== undefined)
+    parts.push(`Status: ${statusLabel(scalar(status))}`);
   const count = take("count");
   if (count !== undefined) parts.push(`${scalar(count)} Dienste`);
   const serviceId = take("service_id");
@@ -273,10 +344,20 @@ export function auditDetailSummary(
   const mfa = take("mfa");
   if (mfa) parts.push("mit 2FA");
   const revoked = take("other_sessions_revoked");
-  if (revoked !== undefined) parts.push(`${scalar(revoked)} andere Sitzungen beendet`);
+  if (revoked !== undefined)
+    parts.push(`${scalar(revoked)} andere Sitzungen beendet`);
   const reason = take("reason");
   if (reason !== undefined) parts.push(scalar(reason));
 
   for (const [k, v] of Object.entries(d)) parts.push(`${k}: ${scalar(v)}`);
   return parts.filter(Boolean).join(" · ");
+}
+
+/** Woran das Ende eines Kontos erkannt wurde. */
+export function deletionBadge(s: {
+  deletion_kind?: "deleted" | "email_changed" | null;
+}): string {
+  return s.deletion_kind === "email_changed"
+    ? "E-Mail geändert"
+    : "Löschung erkannt";
 }

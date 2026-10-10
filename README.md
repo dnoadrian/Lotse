@@ -2,8 +2,8 @@
 
 **Quitly findet deine Online-Konten anhand deiner E-Mails und hilft dir, sie zu löschen.**
 
-Quitly verbindet sich mit deinem Mailcow-Postfach (IMAP) und optional mit Gmail (offizielle API),
-erkennt Registrierungs-, Willkommens-, Bestätigungs- und Löschmails, fasst gefundene Dienste zusammen
+Quitly verbindet sich per IMAP mit deinem Postfach (z. B. Mailcow, Dovecot oder jeder andere IMAP-Server),
+erkennt Registrierungs-, Willkommens-, Bestätigungs-, Lösch- und Adresswechsel-Mails, fasst gefundene Dienste zusammen
 und ordnet sie den offiziellen Löschseiten aus dem [JustDeleteMe](https://github.com/jdm-contrib/jdm)-Datensatz zu.
 Außerdem kannst du einzelne, ausgewählte oder alle E-Mails eines Ordners löschen – mit Bestätigung
 und anschließender Überprüfung auf dem Server.
@@ -12,9 +12,17 @@ Selbst gehostet auf deinem eigenen Linux-Server mit Docker Compose und HTTPS.
 
 ## Funktionen
 
-- **Konten finden:** Scan von Kopfzeilen (nie Inhalte oder Anhänge) in allen Ordnern; Erkennung in
-  Deutsch, Englisch und weiteren Sprachen; Zusammenführen mehrerer Absender-Domains zu einem Dienst;
-  Erkennungsqualität (hoch/mittel/niedrig, in Prozent); erkannte Kontolöschungen setzen den Status automatisch.
+- **Konten finden:** Jede Mail in allen Ordnern (auch Spam und Papierkorb) wird geprüft – Kopfzeilen und der
+  Anfang des Textes, nur im Arbeitsspeicher, nie Anhänge. Erkennung in Deutsch, Englisch und weiteren Sprachen;
+  in der Liste stehen nur **sichere** Konten. Erkennungsqualität in Prozent mit nachvollziehbarer Herleitung.
+- **Gedächtnis:** Einmal erkannte Konten bleiben bekannt, auch wenn du die Mails später löschst.
+- **Lebenszyklus:** Löschanfrage erkannt → „angefragt“; Löschung oder Wechsel der E-Mail-Adresse weg von diesem
+  Postfach → „gelöscht“. Kommt nach einer Löschanfrage 14 Tage lang keine Mail mehr, fragt Quitly nach.
+- **Mails lesen:** Erkannte Mails direkt aus der Kontoansicht öffnen; HTML-Mails laufen bereinigt in einer
+  abgeschotteten Ansicht ohne Skripte, externe Bilder (Tracking) erst auf Wunsch. Gelesen/ungelesen,
+  verschieben, abmelden, Suche im ganzen Ordner.
+- **Favicons:** Symbole der Dienste lädt der Server (geprüft, zwischengespeichert) – dein Browser fragt keine
+  fremden Seiten an.
 - **JustDeleteMe:** Lösch-Link, Schwierigkeit, Anleitung und ggf. Lösch-E-Mail-Adresse direkt aus dem
   Datensatz (2.665 Dienste, Stand siehe `backend/app/data/jdm/VERSION.json`). Gibt es keinen Eintrag,
   zeigt Quitly keinen Link an – es werden keine Links erfunden.
@@ -65,7 +73,6 @@ docker compose exec backend python -m app.cli create-user dein-name
 
 Dann `https://localhost` öffnen (die Browser-Warnung verschwindet, wenn du Caddys lokale CA vertraust, siehe
 [docs/INSTALL.md](docs/INSTALL.md)). Ausführlich: [docs/INSTALL.md](docs/INSTALL.md).
-Gmail ist optional und braucht einen eigenen Google-OAuth-Client: [docs/GMAIL.md](docs/GMAIL.md).
 
 ## Aufbau
 

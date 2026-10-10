@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { useTheme } from "../lib/theme";
 import { Icon, type IconName } from "./Icons";
 import { Logo } from "./Logo";
 
@@ -14,39 +13,22 @@ const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/protokoll", label: "Protokoll", icon: "list" },
 ];
 
-export function ThemeToggle({ compact = false }: { compact?: boolean }) {
-  const { theme, toggle } = useTheme();
-  const dark = theme === "dark";
-  const label = dark ? "Helles Design" : "Dunkles Design";
-  if (compact) {
-    return (
-      <button type="button" className="icon-btn icon-btn-bordered" onClick={toggle} aria-label={label} title={label}>
-        <Icon name={dark ? "sun" : "moon"} />
-      </button>
-    );
-  }
-  return (
-    <button type="button" className="nav-theme" onClick={toggle} aria-pressed={dark}>
-      <Icon name={dark ? "sun" : "moon"} />
-      {label}
-    </button>
-  );
-}
-
 function MoreMenu() {
   const [open, setOpen] = useState(false);
   const { logout, user } = useAuth();
-  const { theme, toggle } = useTheme();
   const location = useLocation();
   const ref = useRef<HTMLDivElement>(null);
-  const active = location.pathname.startsWith("/sicherheit") || location.pathname.startsWith("/protokoll");
+  const active =
+    location.pathname.startsWith("/sicherheit") ||
+    location.pathname.startsWith("/protokoll");
 
   useEffect(() => setOpen(false), [location.pathname]);
 
   useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -69,11 +51,14 @@ function MoreMenu() {
           <NavLink to="/protokoll" className="more-item">
             <Icon name="list" /> Protokoll
           </NavLink>
-          <button type="button" className="more-item" onClick={toggle} aria-pressed={theme === "dark"}>
-            <Icon name={theme === "dark" ? "sun" : "moon"} /> {theme === "dark" ? "Helles Design" : "Dunkles Design"}
-          </button>
-          <div className="more-user muted">Angemeldet als {user?.username ?? "—"}</div>
-          <button type="button" className="more-item more-logout" onClick={() => void logout()}>
+          <div className="more-user muted">
+            Angemeldet als {user?.username ?? "—"}
+          </div>
+          <button
+            type="button"
+            className="more-item more-logout"
+            onClick={() => void logout()}
+          >
             <Icon name="logout" /> Abmelden
           </button>
         </div>
@@ -126,11 +111,14 @@ export function Layout() {
           ))}
         </div>
         <div className="sidebar-foot">
-          <ThemeToggle />
           <div className="user-box">
             <div className="user-box-label">Angemeldet als</div>
             <div className="user-box-name">{user?.username ?? "—"}</div>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => void logout()}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => void logout()}
+            >
               Abmelden
             </button>
           </div>
@@ -139,7 +127,6 @@ export function Layout() {
 
       <header className="mobile-header">
         <Logo size={26} textClass="logo-text logo-text-sm" />
-        <ThemeToggle compact />
       </header>
 
       <main id="inhalt" className="main" ref={mainRef} tabIndex={-1}>

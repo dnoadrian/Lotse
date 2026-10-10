@@ -40,7 +40,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # backend braucht Internet (IMAP/Gmail) und die Datenbank; nach außen nur über Caddy erreichbar
+    # backend braucht Internet (IMAP, Favicons) und die Datenbank; nach außen nur über Caddy erreichbar
     networks: [edge, internal]
     read_only: true
     tmpfs:

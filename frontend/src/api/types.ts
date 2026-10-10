@@ -98,7 +98,32 @@ export interface Job {
 export type Difficulty = "easy" | "medium" | "hard" | "impossible" | "limited";
 export type ServiceStatus = "offen" | "angefragt" | "geloescht" | "behalten";
 export type Quality = "hoch" | "mittel" | "niedrig";
-export type SignalKey = "welcome" | "verification" | "registration" | "deletion" | "notice";
+export type SignalKey =
+  | "welcome"
+  | "verification"
+  | "registration"
+  | "deletion"
+  | "deletion_request"
+  | "email_change"
+  | "email_new"
+  | "security"
+  | "subscription"
+  | "order"
+  | "account"
+  | "notice"
+  | "newsletter"
+  | "contact";
+
+export type Lifecycle = "still_active" | "likely_deleted" | "waiting";
+
+export interface ExplanationItem {
+  category: string;
+  label: string;
+  count: number;
+  best: number;
+  first: string | null;
+  last: string | null;
+}
 
 export interface JdmInfo {
   name: string;
@@ -134,11 +159,54 @@ export interface Service {
   first_seen: string | null;
   last_seen: string | null;
   deletion_detected: boolean;
+  deletion_kind?: "deleted" | "email_changed" | null;
+  deletion_requested_by_mail?: boolean;
+  email_changed?: boolean;
+  mails_in_mailbox?: number;
+  memory_only?: boolean;
+  lifecycle?: Lifecycle | null;
+  explanation?: ExplanationItem[];
   status: ServiceStatus;
   status_changed_at: string | null;
 }
 
-export type FolderSpecial = "inbox" | "sent" | "archive" | "drafts" | "junk" | "trash" | "all" | "";
+export interface ServiceMail {
+  id: number;
+  account_id: number;
+  account_label: string;
+  folder: string;
+  folder_name: string | null;
+  msg_ref: string;
+  category: string;
+  label: string;
+  score: number;
+  reasons: string[];
+  received_at: string | null;
+  sender_domain: string;
+  subject: string | null;
+  from_name: string | null;
+  from_addr: string | null;
+  seen: boolean | null;
+  still_in_mailbox: boolean;
+}
+
+export interface ServiceMails {
+  items: ServiceMail[];
+  explanation: ExplanationItem[];
+  confidence: number;
+  memory_only: boolean;
+  warnings: string[];
+}
+
+export type FolderSpecial =
+  | "inbox"
+  | "sent"
+  | "archive"
+  | "drafts"
+  | "junk"
+  | "trash"
+  | "all"
+  | "";
 
 export interface Folder {
   id: string;
@@ -154,6 +222,32 @@ export interface MessageItem {
   subject: string;
   date: string | null;
   category: SignalKey | string | null;
+  seen: boolean;
+}
+
+export interface MessageAttachment {
+  name: string;
+  content_type: string;
+  size: number;
+}
+
+export interface MessageDetail {
+  id: string;
+  folder: string;
+  folder_name: string;
+  uidvalidity: string;
+  seen: boolean;
+  from: string;
+  to: string;
+  cc: string;
+  date: string | null;
+  subject: string;
+  category: string | null;
+  text: string;
+  has_html: boolean;
+  truncated: boolean;
+  attachments: MessageAttachment[];
+  unsubscribe: { https: string | null; mailto: string | null };
 }
 
 export interface MessageList {
@@ -162,7 +256,6 @@ export interface MessageList {
   page: number;
   page_size: number;
   uidvalidity: string;
-  next_cursor?: string | null;
 }
 
 export type DeleteMode = "selected" | "all" | "registration";

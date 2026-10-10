@@ -3,7 +3,6 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ApiError, errorText } from "../api/client";
 import * as ep from "../api/endpoints";
 import { LogoMark } from "../components/Logo";
-import { ThemeToggle } from "../components/Layout";
 import { Icon } from "../components/Icons";
 import { useAuth } from "../lib/auth";
 import { formatCountdown } from "../lib/format";
@@ -192,9 +191,6 @@ export function LoginPage() {
         </ul>
       </aside>
       <div className="login-main">
-        <div className="login-top">
-          <ThemeToggle compact />
-        </div>
         <div className="login-col">
           <div className="card login-card">
             {auth.status === "unreachable" ? (
@@ -263,7 +259,6 @@ export function LoginPage() {
                     autoComplete="username"
                     autoCapitalize="none"
                     spellCheck={false}
-                    placeholder="dein-name"
                     required
                     maxLength={64}
                     value={username}

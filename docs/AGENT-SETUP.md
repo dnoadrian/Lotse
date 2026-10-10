@@ -69,5 +69,3 @@ Richte die Web-App **Quitly** auf diesem Rechner ein, sodass sie unter **https:/
 - **Verbindungen:** Mailcow mit Server, Port 993, E-Mail-Adresse und einem Mailcow-App-Passwort verbinden,
   dann „Scan starten“.
 - **Sicherheit:** Zwei-Faktor-Anmeldung aktivieren.
-- **Gmail (optional):** braucht einen eigenen Google-OAuth-Client, siehe `docs/GMAIL.md`.
-  Bei Gmail-Wunsch: FRAGEN, dann die Einträge in `.env` nach dieser Anleitung ergänzen und neu starten.

@@ -47,14 +47,12 @@ Danach `https://quitly.example.org` öffnen, anmelden und unter **Sicherheit** d
 
 ## 4. Postfächer verbinden
 
-**Mailcow / IMAP:** Unter **Verbindungen** Server (z. B. `mail.example.org`), Port 993, Benutzer und
-App-Passwort eintragen. Quitly prüft Zertifikat und Hostname und testet die Anmeldung, bevor gespeichert wird.
+**Postfach (IMAP):** Unter **Verbindungen** Server (z. B. `mail.example.org`), Port 993, Benutzer und
+Passwort bzw. App-Passwort eintragen. Quitly prüft Zertifikat und Hostname und testet die Anmeldung, bevor gespeichert wird.
 
 Läuft Mailcow im selben Netz und löst auf eine private IP auf, muss der Hostname ausdrücklich erlaubt werden:
 `QUITLY_IMAP_ALLOWED_HOSTS=mail.example.org` (SSRF-Schutz). Nutzt der Mailserver ein selbst signiertes
 Zertifikat, die CA einbinden (siehe Kommentar in `docker-compose.yml`) und `QUITLY_IMAP_CA_FILE` setzen.
-
-**Gmail (optional):** siehe [GMAIL.md](GMAIL.md).
 
 ## 5. Aktualisieren
 
@@ -96,4 +94,3 @@ Bewahre beides getrennt und verschlüsselt auf.
 | Zertifikat wird nicht ausgestellt | DNS prüfen, Port 80 erreichbar? `docker compose logs caddy` |
 | „Der Server löst auf eine interne Adresse auf“ | Mailserver in `QUITLY_IMAP_ALLOWED_HOSTS` eintragen |
 | „TLS-Zertifikat … ungültig“ | Zertifikat des Mailservers erneuern oder eigene CA einbinden |
-| Gmail-Button fehlt | `QUITLY_GOOGLE_CLIENT_ID/SECRET` setzen, siehe GMAIL.md |

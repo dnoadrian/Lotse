@@ -13,14 +13,21 @@ export function isSafeHttpUrl(url: string | null | undefined): url is string {
   }
 }
 
-const EMAIL_RE = /^[A-Za-z0-9._+\-!$'*=^`{|}~]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+const EMAIL_RE =
+  /^[A-Za-z0-9._+\-!$'*=^`{|}~]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 
-export function isPlainEmail(address: string | null | undefined): address is string {
+export function isPlainEmail(
+  address: string | null | undefined,
+): address is string {
   return !!address && address.length <= 254 && EMAIL_RE.test(address.trim());
 }
 
 /** mailto-Link mit kodiertem Betreff/Text; null bei ungültiger Adresse. */
-export function buildMailto(address: string | null | undefined, subject?: string | null, body?: string | null): string | null {
+export function buildMailto(
+  address: string | null | undefined,
+  subject?: string | null,
+  body?: string | null,
+): string | null {
   if (!isPlainEmail(address)) return null;
   const params: string[] = [];
   if (subject) params.push(`subject=${encodeURIComponent(subject)}`);

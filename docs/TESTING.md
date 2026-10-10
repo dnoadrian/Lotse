@@ -1,33 +1,30 @@
 # Tests und Prüfprotokoll
 
-Stand: 09.10.2026. Alle Ergebnisse wurden tatsächlich ausgeführt; nichts davon ist simuliert,
-außer wo ausdrücklich angegeben (Gmail-API).
+Stand: 10.10.2026. Alle Ergebnisse wurden tatsächlich ausgeführt; nichts davon ist simuliert.
 
 ## Ergebnisse
 
 | Bereich | Werkzeug | Ergebnis |
 |---|---|---|
-| Backend: Sicherheit, API, Erkennung, JDM, SSRF | pytest (SQLite) | **157 bestanden** |
-| Dieselben Tests gegen PostgreSQL 16 | pytest mit `QUITLY_TEST_DATABASE_URL` | **157 bestanden** |
-| davon IMAP-Integration gegen echten Dovecot-IMAPS-Server | pytest | **26 bestanden** |
-| davon Gmail gegen simulierte Google-API | pytest + respx | **13 bestanden** |
-| Frontend: API-Client, Status-/Lösch-Logik | vitest | **43 bestanden** |
+| Backend: Sicherheit, API, Erkennung, Mail-Ansicht, Favicons, JDM, SSRF | pytest (SQLite) | **202 bestanden** |
+| Dieselben Tests gegen PostgreSQL 16 | pytest mit `QUITLY_TEST_DATABASE_URL` | **202 bestanden** |
+| davon IMAP-Integration gegen echten Dovecot-IMAPS-Server | pytest | **32 bestanden** |
+| Frontend: API-Client, Status-/Lösch-Logik, Zuordnungen | vitest | **41 bestanden** |
 | Frontend: Typprüfung | `tsc --noEmit` | fehlerfrei |
-| Ende-zu-Ende im Browser gegen den Docker-Stack (HTTPS, Caddy, PostgreSQL, Dovecot) | Playwright/Chromium | **5 bestanden**, 3 Läufe hintereinander stabil |
-| Statische Sicherheitsanalyse Backend | bandit | **0 Befunde** (nach Behebung, siehe SECURITY.md) |
+| Ende-zu-Ende im Browser: Backend mit 2 Workern + PostgreSQL 16 + Dovecot, Render-ähnliche Variablen | Playwright/Chromium | **8 bestanden** |
+| Statische Sicherheitsanalyse Backend | bandit | **1 Hinweis (niedrig)**: bewusstes `try/except/continue` beim Text-Auslesen kaputter Mail-Teile |
 | Bekannte Schwachstellen Python-Abhängigkeiten | pip-audit | **0** |
 | Bekannte Schwachstellen npm (Frontend, E2E) | npm audit | **0** |
-| Container-Härtung | manuell | Backend läuft als UID 10001, Dateisystem schreibgeschützt, keine Capabilities |
-| Startskript (Linux) | manuell | Stack startet, lokale CA wird vertraut, `https://quitly.at` ohne Warnung |
+| Container-Härtung, Startskript, Docker-Stack mit Caddy | manuell / Playwright | zuletzt am 09.10.2026 geprüft, seitdem nicht erneut |
 
 ## Was die Tests abdecken
 
 **Integrationen**
 - IMAP gegen echten Dovecot mit eigener Test-CA: Verbindung, falsches Passwort, nicht vertrauenswürdiges
   Zertifikat, falscher Hostname, Loopback ohne Allowlist, Ordner, Nachrichtenliste, Lesen setzt kein `\Seen`.
-- Gmail (simuliert): OAuth mit PKCE (Prüfung der Challenge), State einmalig und an Sitzung gebunden,
-  Abbruch, verschlüsselte Token-Speicherung, Scan, Labels, Papierkorb mit Überprüfung, Teilfehler,
-  Ablehnung endgültigen Löschens, Widerruf beim Entfernen.
+- Spam-Ordner wird gescannt (Cloudflare, Discord), Löschanfrage → „angefragt“, Adresswechsel → „gelöscht“,
+  Gedächtnis nach dem Löschen der Mails, erkannte Mails je Dienst, Mail lesen (Text, bereinigtes HTML mit
+  eigener CSP, Abmelde-Links), gelesen/ungelesen, verschieben, Volltextsuche inkl. Umlaute.
 
 **E-Mail-Erkennung**
 - 17 Betreff-Varianten in Deutsch, Englisch, Französisch (Willkommen, Bestätigung, Registrierung,
@@ -67,9 +64,7 @@ Destruktive Tests laufen ausschließlich gegen das Testpostfach `test@quitly.tes
 
 ## Nicht automatisch getestet
 
-- **Echtes Gmail:** Es liegen keine Google-OAuth-Zugangsdaten vor. Getestet ist das Protokollverhalten gegen
-  eine simulierte API. Für einen echten Test: OAuth-Client nach [GMAIL.md](GMAIL.md) einrichten.
-- **Echter Mailcow-Server:** Getestet gegen Dovecot, den IMAP-Server, den Mailcow selbst verwendet.
+- **Echter Mailserver deines Anbieters:** Getestet gegen Dovecot (den IMAP-Server u. a. von Mailcow).
 - **Windows- und macOS-Startdatei:** Unter Linux ausgeführt und getestet; die Windows- (PowerShell) und
   macOS-Variante folgen derselben Logik, konnten hier aber nicht auf echten Geräten laufen.
 - **Let's Encrypt:** braucht eine öffentlich erreichbare Domain; lokal getestet mit Caddys interner CA.

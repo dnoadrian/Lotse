@@ -18,17 +18,14 @@ async function login(page: Page) {
   await expect(page.getByRole("heading", { name: "Konten" })).toBeVisible();
 }
 
-async function setTheme(page: Page, theme: "light" | "dark") {
-  const current = await page.evaluate(() => document.documentElement.dataset.theme);
-  if (current !== theme) {
-    await page.getByRole("button", { name: /Dunkles Design|Helles Design/ }).first().click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-  }
-}
-
-test.beforeAll(() => {
+test.beforeAll(async ({ request }) => {
   // Testpostfach in definierten Zustand bringen
   execFileSync("python3", ["-I", new URL("../../scripts/test-imap/seed.py", import.meta.url).pathname], { stdio: "inherit" });
+  // Testbenutzer anlegen (falls es ihn schon gibt, antwortet der Server mit 409)
+  await request.post("/api/auth/register", {
+    headers: { "X-Quitly-Request": "1" },
+    data: { username: USER, password: PASS },
+  });
 });
 
 test("Anmeldung: falsches Passwort wird abgewiesen", async ({ page }) => {
@@ -42,12 +39,14 @@ test("Anmeldung: falsches Passwort wird abgewiesen", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText("Benutzername oder Passwort falsch");
 });
 
-test("Registrierung: eigenes Konto mit Auge statt Doppeleingabe, dunkles Design als Standard", async ({ page }) => {
+test("Registrierung: eigenes Konto mit Auge, leeres Namensfeld, nur dunkles Design", async ({ page }) => {
   await page.goto("/login");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("button", { name: "Konto erstellen" }).click();
   await expect(page.getByRole("heading", { name: "Konto erstellen" })).toBeVisible();
   const name = `e2e${Date.now() % 1_000_000}`;
+  expect(await page.getByLabel("Benutzername").getAttribute("placeholder")).toBeFalsy();
+  await expect(page.getByRole("button", { name: /Dunkles Design|Helles Design/ })).toHaveCount(0);
   await page.getByLabel("Benutzername").fill(name);
   const pw = page.getByLabel("Passwort", { exact: true });
   await pw.fill("abcd1");
@@ -82,15 +81,19 @@ test("Postfach verbinden, scannen und Konten verwalten", async ({ page }) => {
     await expect(removeButtons).toHaveCount(n - 1);
   }
 
-  const form = page.locator("section", { has: page.getByRole("heading", { name: "Mailcow / IMAP hinzufügen" }) });
-  await form.getByLabel("Bezeichnung").fill("Mailcow Test");
+  const form = page.locator("section", { has: page.getByRole("heading", { name: "Postfach hinzufügen" }) });
+  await form.getByLabel("Bezeichnung").fill("Testpostfach");
   await form.getByLabel("Server").fill("imap.quitly.test");
   await form.getByLabel("Port").fill("10993");
   await form.getByLabel("Benutzer").fill("test@quitly.test");
-  await form.getByLabel("App-Passwort").fill("test-passwort-123");
+  await form.getByLabel("App-Passwort", { exact: true }).fill("test-passwort-123");
+  const pw = form.getByLabel("App-Passwort", { exact: true });
+  await expect(pw).toHaveAttribute("type", "password");
+  await form.getByRole("button", { name: "Passwort anzeigen" }).click();
+  await expect(pw).toHaveAttribute("type", "text");
   await form.getByRole("button", { name: "Verbinden & speichern" }).click();
   const card = page.locator("section[aria-label='Verbundene Postfächer']");
-  await expect(card.getByRole("heading", { name: "Mailcow Test" })).toHaveCount(1);
+  await expect(card.getByRole("heading", { name: "Testpostfach" })).toHaveCount(1);
 
   await card.getByRole("button", { name: "Scan starten" }).first().click();
   await expect(page.getByText(/abgeschlossen/i).first()).toBeVisible({ timeout: 45_000 });
@@ -101,6 +104,11 @@ test("Postfach verbinden, scannen und Konten verwalten", async ({ page }) => {
   const table = page.getByRole("main");
   await expect(table.getByText("GitHub").first()).toBeVisible();
   await expect(table.getByText("Spotify").first()).toBeVisible();
+  // Auch im Spam-Ordner gefunden; Löschanfrage und Adresswechsel erkannt
+  await expect(table.getByText("Cloudflare").first()).toBeVisible();
+  await expect(table.getByText("E-Mail geändert").first()).toBeVisible();
+  // Nur sichere Konten: reiner Kontakt ohne Konto-Hinweis erscheint nicht
+  await expect(table.getByText("Kulturverein")).toHaveCount(0);
   // Kein erfundener Link für Dienste ohne JustDeleteMe-Eintrag
   await expect(table.getByText("Kein JDM-Eintrag").first()).toBeVisible();
   // Link für GitHub stammt aus dem JDM-Datensatz
@@ -108,11 +116,15 @@ test("Postfach verbinden, scannen und Konten verwalten", async ({ page }) => {
   const link = ghRow.getByRole("link", { name: /Löschseite/ });
   await expect(link).toHaveAttribute("href", /^https:\/\/github\.com\/settings\/admin/);
   await expect(link).toHaveAttribute("rel", /noopener/);
-  await setTheme(page, "light");
-  await page.screenshot({ path: SHOTS + "desktop-konten-hell.png", fullPage: true });
-  await setTheme(page, "dark");
-  await page.screenshot({ path: SHOTS + "desktop-konten-dunkel.png", fullPage: true });
-  await setTheme(page, "light");
+  await page.screenshot({ path: SHOTS + "desktop-konten.png", fullPage: true });
+
+  // Mehrfachauswahl: mehrere Konten gleichzeitig markieren
+  for (const n of ["GitHub", "Spotify", "Cloudflare"]) {
+    await page.getByRole("checkbox", { name: `${n} auswählen` }).check();
+  }
+  await expect(page.getByText("3 ausgewählt")).toBeVisible();
+  await page.screenshot({ path: SHOTS + "desktop-konten-auswahl.png" });
+  await page.getByRole("button", { name: "Auswahl aufheben" }).click().catch(() => undefined);
 
   // Suche
   await page.getByRole("searchbox").first().fill("spoti");
@@ -155,18 +167,54 @@ test("E-Mails: Auswahl mit Bestätigung löschen und Ergebnis prüfen", async ({
   await expect(page.getByText("Welcome to GitHub, test!")).toBeVisible();
 });
 
+test("Konten: erkannte Mail anklicken öffnet sie unter E-Mails", async ({ page }) => {
+  await login(page);
+  await page.getByRole("button", { name: "Details zu GitHub" }).click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer.getByRole("heading", { name: "Erkannte Mails" })).toBeVisible();
+  await expect(drawer.getByText(/So entstehen \d+ %/)).toBeVisible();
+  await page.waitForTimeout(700); // Einblend-Animation abwarten
+  await page.screenshot({ path: SHOTS + "desktop-konto-details.png" });
+  await drawer.getByRole("button", { name: /Welcome to GitHub, test! öffnen/ }).click();
+  await expect(page).toHaveURL(/\/emails\?.*mail=/);
+  const reader = page.getByRole("dialog");
+  await expect(reader.getByRole("heading", { name: "Welcome to GitHub, test!" })).toBeVisible();
+  await expect(reader.getByText("Erfundene Testnachricht.")).toBeVisible();
+});
+
+test("E-Mails: HTML-Mail sicher lesen, suchen, als ungelesen markieren", async ({ page }) => {
+  await login(page);
+  await page.goto("/emails");
+  await page.getByRole("button", { name: /Willkommen bei Netflix/ }).first().click();
+  const reader = page.getByRole("dialog");
+  await expect(reader.getByRole("heading", { name: "Willkommen bei Netflix" })).toBeVisible();
+  const frame = reader.locator("iframe");
+  await expect(frame).toHaveAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+  await expect(frame.contentFrame().getByRole("heading", { name: "Willkommen bei Netflix" })).toBeVisible();
+  await expect(reader.getByText("Externe Bilder sind blockiert")).toBeVisible();
+  await expect(reader.getByRole("link", { name: /Abmelden/ })).toHaveAttribute("href", "https://www.netflix.com/unsubscribe");
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: SHOTS + "desktop-mail-lesen.png" });
+  await reader.getByRole("tab", { name: "Nur Text" }).click();
+  await expect(reader.getByText("Dein Konto ist jetzt aktiv.")).toBeVisible();
+  await reader.getByRole("button", { name: "Als ungelesen markieren" }).click();
+  await expect(reader.getByRole("button", { name: "Als gelesen markieren" })).toBeVisible();
+  await reader.getByRole("button", { name: "Nachricht schließen" }).click();
+
+  // Suche auf dem Server, auch im Text
+  await page.getByRole("searchbox").fill("Dropbox");
+  await expect(page.getByRole("button", { name: /Dein Dropbox-Konto wurde gelöscht/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Welcome to GitHub/ })).toHaveCount(0);
+});
+
 test.describe("Mobil", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 
   test("Mobilansicht ohne horizontales Scrollen", async ({ page }) => {
     await login(page);
-    await setTheme(page, "light");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
-    await page.screenshot({ path: SHOTS + "mobil-konten-hell.png" });
-    await setTheme(page, "dark");
-    await page.screenshot({ path: SHOTS + "mobil-konten-dunkel.png" });
-    await setTheme(page, "light");
+    await page.screenshot({ path: SHOTS + "mobil-konten.png" });
     await page.goto("/emails");
     await expect(page.getByRole("heading", { name: "E-Mails" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);

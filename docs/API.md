@@ -14,7 +14,7 @@ Das Sitzungs-Cookie ist HttpOnly und wird vom Browser automatisch mitgeschickt (
 
 Statuscodes: `401` = nicht angemeldet (→ zur Anmeldung), `403` = CSRF/Origin, `404` = nicht gefunden oder nicht
 der eigene Datensatz, `409` = Konflikt (Daten haben sich geändert), `422` = ungültige Eingabe, `429` = Rate-Limit
-(`Retry-After`-Header), `502` = Mailserver/Gmail-Fehler (Meldung ist für Nutzer verständlich).
+(`Retry-After`-Header), `502` = Mailserver-Fehler (Meldung ist für Nutzer verständlich).
 
 ## Anmeldung
 
@@ -38,18 +38,16 @@ der eigene Datensatz, `409` = Konflikt (Daten haben sich geändert), `422` = ung
 
 ## Konfiguration
 
-- `GET /api/config` → `{gmail_enabled, imap_allowed_ports: [993], jdm: {entries, commit, date, source}}`
+- `GET /api/config` → `{imap_allowed_ports: [993], jdm: {entries, commit, date, source}}`
 
 ## Postfächer
 
 - `GET /api/mail-accounts` → `[Account]`
-  `Account = {id, provider: "imap"|"gmail", label, email_address, imap_host, imap_port, status: "ok"|"error", last_error, created_at, last_scan_at}`
+  `Account = {id, provider: "imap", label, email_address, imap_host, imap_port, status: "ok"|"error", last_error, created_at, last_scan_at}`
 - `POST /api/mail-accounts/imap` `{label, host, port, username, password}` → `Account` (testet die Verbindung vorher)
 - `PUT /api/mail-accounts/{id}/imap` `{label?, host?, port?, username?, password?}` → `Account`
 - `POST /api/mail-accounts/{id}/test` → `Account` (Status aktualisiert)
 - `DELETE /api/mail-accounts/{id}` → `{ok}`
-- `POST /api/mail-accounts/gmail/start` `{label}` → `{authorization_url}` (Browser dorthin weiterleiten)
-- Google leitet zurück auf `/api/oauth/google/callback`, das wiederum auf `/verbindungen?gmail=ok|fehler|abgebrochen`
 
 ## Scans
 
@@ -78,14 +76,30 @@ der eigene Datensatz, `409` = Konflikt (Daten haben sich geändert), `422` = ung
 - `PATCH /api/services/{id}` `{status}` → `Service`
 - `POST /api/services/bulk-status` `{ids: [int], status}` → `{updated}`
 - `GET /api/services/export.csv` → CSV-Download
+- `GET /api/services/{id}/mails` → `{items: [{id, account_id, account_label, folder, folder_name, msg_ref, category,
+  label, score, reasons, received_at, sender_domain, subject, from_name, from_addr, seen, still_in_mailbox}],
+  explanation: [{category, label, count, best, first, last}], confidence, memory_only, warnings}` – Betreffe werden
+  live vom Mailserver gelesen, nicht gespeichert.
+- `GET /api/services/{id}/favicon` → PNG/ICO/GIF/JPEG/WebP oder `404`. Vom Server geladen (nur öffentliche
+  Adressen, HTTPS, max. 256 KB, Signaturprüfung), 14 Tage zwischengespeichert.
 
 ## E-Mails
 
 - `GET /api/mail/{account_id}/folders` → `[{id, name, special: "inbox"|"sent"|"archive"|"drafts"|"junk"|"trash"|"all"|"", count}]`
-  `id` ist der Server-Name (IMAP) bzw. die Label-ID (Gmail) und wird unverändert zurückgeschickt.
-- `GET /api/mail/{account_id}/messages?folder=<id>&page=1&page_size=50&only_registration=false&cursor=`
-  → `{items: [{id, from_name, from_addr, subject, date, category}], total, page, page_size, uidvalidity, next_cursor}`
-  Gmail blättert per `cursor` (`next_cursor`), IMAP per `page`.
+  `id` ist der Ordnername vom Server und wird unverändert zurückgeschickt (nur gemeldete Ordner werden akzeptiert).
+- `GET /api/mail/{account_id}/messages?folder=<id>&page=1&page_size=50&only_registration=false&q=`
+  → `{items: [{id, from_name, from_addr, subject, date, category, seen}], total, page, page_size, uidvalidity}`
+  `q` (max. 100 Zeichen): Volltextsuche auf dem Server (Kopf und Text, `UID SEARCH CHARSET UTF-8 TEXT`).
+- `GET /api/mail/{account_id}/message?folder=<id>&uid=<id>` → `{id, folder, folder_name, uidvalidity, seen, from, to, cc,
+  date, subject, category, text, has_html, truncated, attachments: [{name, content_type, size}],
+  unsubscribe: {https, mailto}}` – liest mit `BODY.PEEK` (setzt kein `\Seen`), nichts wird gespeichert.
+- `GET /api/mail/{account_id}/message/html?folder=<id>&uid=<id>&images=false` → bereinigtes HTML (nh3) als
+  eigenes Dokument für ein `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">`. Eigene CSP:
+  `default-src 'none'; style-src 'unsafe-inline'; img-src data:` (mit `images=true` zusätzlich `https:`),
+  `form-action 'none'`, `frame-ancestors 'self'`, `sandbox`. Anhänge werden nie ausgeliefert.
+- `POST /api/mail/{account_id}/flags` `{folder, ids, seen}` → `{updated, seen}`
+- `POST /api/mail/{account_id}/move` `{folder, ids, target}` → `{requested, moved, failed, verified}`
+  (Ziel muss ein vom Server gemeldeter Ordner sein; danach wird geprüft, ob die Nachrichten weg sind)
 - `POST /api/mail/{account_id}/delete`
   ```
   {folder, mode: "selected"|"all"|"registration", ids: [str], permanent: bool,
@@ -93,5 +107,4 @@ der eigene Datensatz, `409` = Konflikt (Daten haben sich geändert), `422` = ung
   ```
   `confirmation` ist Pflicht, sobald mehr als eine Nachricht, ein ganzer Ordner oder endgültig gelöscht wird.
   → `{requested, deleted, already_missing, failed, failed_ids, moved_to_trash, verified, remaining}`
-  `remaining > 0` bedeutet (nur Gmail): Limit von 1000 pro Vorgang erreicht, Vorgang wiederholen.
   `409`: Ordner hat sich geändert → Liste neu laden und erneut bestätigen.

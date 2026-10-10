@@ -15,7 +15,9 @@ describe("URL-Prüfungen", () => {
   });
 
   it("baut mailto-Links kodiert", () => {
-    expect(buildMailto("privacy@example.com", "Konto löschen", "Hallo & tschüss")).toBe(
+    expect(
+      buildMailto("privacy@example.com", "Konto löschen", "Hallo & tschüss"),
+    ).toBe(
       "mailto:privacy@example.com?subject=Konto%20l%C3%B6schen&body=Hallo%20%26%20tsch%C3%BCss",
     );
     expect(buildMailto("a@b.co")).toBe("mailto:a@b.co");
@@ -26,8 +28,12 @@ describe("URL-Prüfungen", () => {
 
 describe("Datum", () => {
   it("behandelt Zeitstempel ohne Zone als UTC", () => {
-    expect(parseDate("2026-10-09T12:00:00")?.toISOString()).toBe("2026-10-09T12:00:00.000Z");
-    expect(parseDate("2026-10-09T12:00:00+02:00")?.toISOString()).toBe("2026-10-09T10:00:00.000Z");
+    expect(parseDate("2026-10-09T12:00:00")?.toISOString()).toBe(
+      "2026-10-09T12:00:00.000Z",
+    );
+    expect(parseDate("2026-10-09T12:00:00+02:00")?.toISOString()).toBe(
+      "2026-10-09T10:00:00.000Z",
+    );
     expect(parseDate("unsinn")).toBeNull();
     expect(formatDate(null)).toBe("—");
     expect(formatCountdown(299)).toBe("4:59");
@@ -46,9 +52,13 @@ describe("Blättern", () => {
 
 describe("Scan-Schritte", () => {
   it("leitet den Zustand der Schritte ab", () => {
-    expect(stepState({ status: "running", step: "classify" }, 0)).toBe("fertig");
+    expect(stepState({ status: "running", step: "classify" }, 0)).toBe(
+      "fertig",
+    );
     expect(stepState({ status: "running", step: "classify" }, 1)).toBe("läuft");
-    expect(stepState({ status: "running", step: "classify" }, 2)).toBe("wartet");
+    expect(stepState({ status: "running", step: "classify" }, 2)).toBe(
+      "wartet",
+    );
     expect(stepState({ status: "done", step: "jdm" }, 3)).toBe("fertig");
     expect(stepState({ status: "queued", step: null }, 0)).toBe("wartet");
     expect(stepState({ status: "error", step: "fetch" }, 0)).toBe("fehler");

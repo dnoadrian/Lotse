@@ -69,7 +69,7 @@ def test_favicon_fetch_only_to_public_addresses():
         resolve_public("127.0.0.1", 443)
 
 
-def test_icon_links_prefers_large_png_and_skips_svg():
+def test_icon_links_prefers_large_icons_including_svg():
     from app.favicons import icon_links
 
     html = (
@@ -79,8 +79,27 @@ def test_icon_links_prefers_large_png_and_skips_svg():
         '<link rel="icon" href="javascript:alert(1)"><link rel="stylesheet" href="/a.css"></head>'
     )
     assert icon_links(html, "https://www.example.com/") == [
-        "https://cdn.example.com/apple.png", "https://www.example.com/favicon-32.png",
+        "https://cdn.example.com/apple.png", "https://www.example.com/icon.svg",
+        "https://www.example.com/favicon-32.png",
     ]
+    assert icon_links('<link rel="icon" href="/i.png?a=1&amp;b=2">', "https://x.example/") == ["https://x.example/i.png?a=1&b=2"]
+
+
+def test_svg_icons_only_without_scripts():
+    good = b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><circle r="4"/></svg>'
+    assert sniff(good) == "image/svg+xml"
+    for bad in (b'<svg onload="alert(1)"></svg>', b"<svg><script>alert(1)</script></svg>",
+                b'<svg><a href="javascript:alert(1)"/></svg>', b"<svg><foreignObject><p/></foreignObject></svg>"):
+        assert sniff(bad) is None
+
+
+def test_favicon_tries_all_candidate_sites(monkeypatch):
+    from app import favicons
+
+    seen = []
+    monkeypatch.setattr(favicons, "fetch", lambda site: seen.append(site) or ((b"x", "image/png") if site == "petpanda.at" else None))
+    assert favicons.fetch_any(["mailer-petpanda.com", "petpanda.at"]) == (b"x", "image/png")
+    assert seen == ["mailer-petpanda.com", "petpanda.at"]
 
 
 def test_favicon_fetch_falls_back_to_icon_services(monkeypatch):

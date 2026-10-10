@@ -6,13 +6,16 @@ Konten bei Dritten) und die strenge CSP (img-src 'self') bleibt bestehen.
 Sicherheit (SSRF):
 - nur HTTPS auf Port 443, nur Namen (keine IP-Literale), DNS wird aufgelöst und jede Adresse muss öffentlich sein
 - Verbindung zur geprüften IP, TLS-Zertifikat und Hostname werden geprüft (kein DNS-Rebinding)
-- höchstens 3 Weiterleitungen, jede wird erneut geprüft; Zeitlimit; höchstens 256 KB
-- nur echte Rasterbilder (PNG, ICO, GIF, JPEG, WebP) anhand der Datei-Signatur – kein SVG, kein HTML
+- höchstens 3 Weiterleitungen, jede wird erneut geprüft; Zeitlimit; höchstens 512 KB
+- nur echte Bilder anhand der Datei-Signatur (PNG, ICO, GIF, JPEG, WebP, SVG ohne Skripte) – kein HTML;
+  ausgeliefert mit nosniff und einer CSP, die jedes Skript verbietet (auch bei direktem Aufruf)
 """
 from __future__ import annotations
 
+import html as _html
 import http.client
 import re
+import zlib
 import socket
 import ssl
 from datetime import timedelta
@@ -26,17 +29,17 @@ from .jdm.catalog import get_catalog
 from .models import Favicon, Service, utcnow
 from .security.netguard import HostNotAllowed, normalize_host, resolve_public
 
-MAX_BYTES = 256 * 1024
+MAX_BYTES = 512 * 1024
 HTML_BYTES = 512 * 1024
 TIMEOUT = 5
 MAX_REDIRECTS = 3
 FRESH = timedelta(days=14)
-RETRY_FAILED = timedelta(hours=12)
+RETRY_FAILED = timedelta(hours=6)
 # Viele Seiten (Cloudflare, Akamai) weisen unbekannte Programme ab – daher eine übliche Browser-Kennung
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/131.0 Safari/537.36")
 # Bei Änderungen am Abrufverfahren erhöhen: alte Fehlschläge werden dann sofort neu versucht
-STRATEGY = "v2"
+STRATEGY = "v3"
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
@@ -69,6 +72,12 @@ def sniff(data: bytes) -> str | None:
         return "image/jpeg"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
+    head = data[:4096].lstrip(b"\xef\xbb\xbf \t\r\n").lower()
+    if (head.startswith(b"<svg") or head.startswith((b"<?xml", b"<!--", b"<!doctype svg"))) and b"<svg" in head:
+        body = data.lower()
+        if any(bad in body for bad in (b"<script", b"javascript:", b"<foreignobject", b"onload=", b"onerror=")):
+            return None
+        return "image/svg+xml"
     return None
 
 
@@ -99,6 +108,15 @@ def _request(url: str, accept: str, max_bytes: int) -> tuple[bytes, str] | None:
             data = resp.read(max_bytes + 1)
             if len(data) > max_bytes:
                 return None
+            encoding = (resp.getheader("Content-Encoding") or "").lower()
+            if encoding in ("gzip", "x-gzip", "deflate"):
+                # Manche CDNs komprimieren trotzdem – begrenzt entpacken (Schutz vor Zip-Bomben)
+                d = zlib.decompressobj(zlib.MAX_WBITS | 32 if encoding != "deflate" else zlib.MAX_WBITS)
+                data = d.decompress(data, max_bytes + 1)
+                if len(data) > max_bytes:
+                    return None
+            elif encoding not in ("", "identity"):
+                return None
             return data, url
         finally:
             conn.close()
@@ -123,15 +141,13 @@ _ATTR = re.compile(r"""([a-zA-Z:-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""")
 
 
 def icon_links(html: str, base: str) -> list[str]:
-    """Symbol-Links aus dem <head> einer Startseite, große PNGs zuerst (apple-touch-icon), SVG ausgeschlossen."""
+    """Symbol-Links aus dem <head> einer Startseite, große zuerst (apple-touch-icon, dann SVG, dann nach Größe)."""
     found: list[tuple[int, str]] = []
     for tag in _LINK.findall(html[:300_000]):
-        attrs = {k.lower(): v.strip("\"'") for k, v in _ATTR.findall(tag)}
+        attrs = {k.lower(): _html.unescape(v.strip("\"'")) for k, v in _ATTR.findall(tag)}
         rel = attrs.get("rel", "").lower()
         href = attrs.get("href", "")
         if "icon" not in rel or not href or href.startswith("data:"):
-            continue
-        if href.lower().split("?")[0].endswith(".svg") or "svg" in attrs.get("type", "").lower():
             continue
         url = urljoin(base, href)
         if not url.startswith("https://"):
@@ -142,6 +158,8 @@ def icon_links(html: str, base: str) -> list[str]:
             size = int(m.group(1))
         if "apple-touch-icon" in rel:
             size = max(size, 180)
+        elif href.lower().split("?")[0].endswith(".svg") or "svg" in attrs.get("type", "").lower():
+            size = max(size, 120)  # SVG ist in jeder Größe scharf
         found.append((size, url))
     found.sort(key=lambda x: -x[0])
     return [u for _, u in found][:4]
@@ -165,29 +183,52 @@ def fetch(site: str) -> tuple[bytes, str] | None:
             if got:
                 return got
     for url in (f"https://icons.duckduckgo.com/ip3/{site}.ico",
-                f"https://www.google.com/s2/favicons?domain={site}&sz=64"):
+                f"https://www.google.com/s2/favicons?domain={site}&sz=64",
+                f"https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL"
+                f"&url=https://{site}&size=64"):
         got = _image(url)
         if got:
             return got
     return None
 
 
-def site_for(svc: Service) -> str | None:
-    """Die Website des Dienstes: bevorzugt die Domain aus JustDeleteMe, sonst die registrierbare Absender-Domain."""
+def sites_for(svc: Service) -> list[str]:
+    """Mögliche Websites des Dienstes: Domains aus JustDeleteMe, dann die registrierbaren Absender-Domains."""
     entry = get_catalog().by_name(svc.jdm_name)
     candidates = list(entry.domains) if entry is not None else []
     candidates += [registrable_domain(d) for d in (svc.domains or [])]
+    out: list[str] = []
     for c in candidates:
         try:
-            return normalize_host(c)
+            host = normalize_host(c)
         except HostNotAllowed:
             continue
+        if host.startswith("www."):
+            host = host[4:]
+        if host not in out:
+            out.append(host)
+    return out[:3]
+
+
+def site_for(svc: Service) -> str | None:
+    sites = sites_for(svc)
+    return sites[0] if sites else None
+
+
+def fetch_any(sites: list[str]) -> tuple[bytes, str] | None:
+    for site in sites:
+        got = fetch(site)
+        if got:
+            return got
     return None
 
 
-async def get_icon(db: Session, site: str | None) -> tuple[bytes, str] | None:
-    if not site:
+async def get_icon(db: Session, sites: list[str] | str | None) -> tuple[bytes, str] | None:
+    if isinstance(sites, str):
+        sites = [sites]
+    if not sites:
         return None
+    site = sites[0]
     row = db.get(Favicon, site)
     now = utcnow()
     if row is not None:
@@ -197,7 +238,7 @@ async def get_icon(db: Session, site: str | None) -> tuple[bytes, str] | None:
             return row.data, row.content_type
         if not row.data and age < RETRY_FAILED and row.content_type == f"fail:{STRATEGY}":
             return None
-    got = await run_in_threadpool(fetch, site)
+    got = await run_in_threadpool(fetch_any, sites)
     if row is None:
         row = Favicon(site=site)
         db.add(row)

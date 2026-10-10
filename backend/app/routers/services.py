@@ -214,7 +214,7 @@ async def service_favicon(service_id: int, auth: Auth = Depends(require_auth), d
     svc = db.get(Service, service_id)
     if svc is None or svc.user_id != auth.user.id:
         raise HTTPException(404, "Dienst nicht gefunden.")
-    icon = await favicons.get_icon(db, favicons.site_for(svc))
+    icon = await favicons.get_icon(db, favicons.sites_for(svc))
     if icon is None:
         raise HTTPException(404, "Kein Symbol.")
     data, ctype = icon

@@ -170,6 +170,16 @@ test("Zwei Postfächer gleichzeitig, Konten nach Postfach filtern, Bereich mit S
   await expect(table.getByText("Epic Games").first()).toBeVisible();
   await expect(table.getByText("GitHub").first()).toBeVisible(); // in beiden Postfächern
   await expect(table.getByText("Spotify")).toHaveCount(0);
+  // Gefiltert zählt nur dieses Postfach: Quelle und Mail-Anzahl
+  const ghRow = page.locator(".svc-body-row", { hasText: "GitHub" });
+  await expect(ghRow).toContainText("Zweitpostfach");
+  await expect(ghRow).not.toContainText("Testpostfach");
+  await expect(ghRow).toContainText("1 Mails");
+  await ghRow.getByRole("button", { name: "Details zu GitHub" }).click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer.getByRole("button", { name: /öffnen$/ })).toHaveCount(1);
+  await expect(drawer.getByText("Zweitpostfach · INBOX")).toBeVisible();
+  await drawer.getByRole("button", { name: "Details schließen" }).click();
   await page.screenshot({ path: SHOTS + "desktop-konten-postfach.png" });
 
   // Shift-Klick wählt den ganzen Bereich

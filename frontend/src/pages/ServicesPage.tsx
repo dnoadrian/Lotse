@@ -296,13 +296,23 @@ export function ServicesPage() {
 
   const allServices = services ?? [];
   // Nur die Konten eines Postfachs zeigen (oder alle)
-  const all = useMemo(
-    () =>
-      mailboxF
-        ? allServices.filter((s) => s.sources.some((src) => src.account_id === mailboxF))
-        : allServices,
-    [allServices, mailboxF],
-  );
+  const all = useMemo(() => {
+    if (!mailboxF) return allServices;
+    // Nur dieses Postfach: Quelle, Mail- und Absenderzahl beziehen sich dann ausschließlich darauf
+    return allServices.flatMap((s) => {
+      const src = s.sources.find((x) => x.account_id === mailboxF);
+      if (!src) return [];
+      return [
+        {
+          ...s,
+          sources: [src],
+          message_count: src.messages,
+          signal_count: src.signals,
+          sender_count: src.senders ?? s.sender_count,
+        },
+      ];
+    });
+  }, [allServices, mailboxF]);
   const visible = useMemo(
     () =>
       filterServices(all, {
@@ -930,6 +940,7 @@ export function ServicesPage() {
 
       {detail ? (
         <ServiceDetail
+          mailboxId={mailboxF}
           service={detail}
           onClose={() => setDetailId(null)}
           onStatus={(sv, st) => void changeStatus(sv, st)}

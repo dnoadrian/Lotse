@@ -140,8 +140,9 @@ export interface ServiceSource {
   account_id: number;
   label: string;
   provider: Provider;
-  messages: number;
+    messages: number;
   signals: number;
+  senders?: number;
 }
 
 export interface Service {

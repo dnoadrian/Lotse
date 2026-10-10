@@ -56,7 +56,8 @@ def service_out(svc: Service, accounts: dict[int, MailAccount]) -> dict:
         acc = accounts.get(int(acc_id))
         if acc:
             sources.append({"account_id": acc.id, "label": acc.label, "provider": acc.provider,
-                            "messages": info.get("messages", 0), "signals": info.get("signals", 0)})
+                            "messages": info.get("messages", 0), "signals": info.get("signals", 0),
+                            "senders": info.get("senders", 0)})
     return {
         "id": svc.id,
         "name": svc.display_name,

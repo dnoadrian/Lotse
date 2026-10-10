@@ -23,7 +23,9 @@ export function ServiceDetail({
   service,
   onClose,
   onStatus,
+  mailboxId = null,
 }: {
+  mailboxId?: number | null;
   service: Service;
   onClose: () => void;
   onStatus: (s: Service, status: ServiceStatus) => void;
@@ -39,13 +41,15 @@ export function ServiceDetail({
     setMailsError(null);
     ep.getServiceMails(service.id, ctrl.signal)
       .then((m) => {
-        if (!ctrl.signal.aborted) setMails(m);
+        if (ctrl.signal.aborted) return;
+        // Bei gewähltem Postfach nur dessen Mails zeigen
+        setMails(mailboxId ? { ...m, items: m.items.filter((x) => x.account_id === mailboxId) } : m);
       })
       .catch((err) => {
         if (!ctrl.signal.aborted) setMailsError(errorText(err));
       });
     return () => ctrl.abort();
-  }, [service.id]);
+  }, [service.id, mailboxId]);
 
   function openMail(accountId: number, folder: string, uid: string) {
     const params = new URLSearchParams({

@@ -11,6 +11,25 @@ import { formatDateTime, formatNumber } from "../lib/format";
 import { categoryLabel, folderDisplayName } from "../lib/mappings";
 import { isSafeHttpUrl } from "../lib/url";
 
+const IMAGES_KEY = "quitly-images-always";
+
+function readAlways(): boolean {
+  try {
+    return window.localStorage.getItem(IMAGES_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeAlways(on: boolean): void {
+  try {
+    if (on) window.localStorage.setItem(IMAGES_KEY, "1");
+    else window.localStorage.removeItem(IMAGES_KEY);
+  } catch {
+    /* Speicher nicht verfügbar – gilt dann nur für diese Ansicht */
+  }
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${formatNumber(bytes)} B`;
   if (bytes < 1024 * 1024)
@@ -41,7 +60,8 @@ export function MailReader({
   const [mail, setMail] = useState<MessageDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"text" | "html">("text");
-  const [images, setImages] = useState(false);
+  const [always, setAlways] = useState(readAlways);
+  const [images, setImages] = useState(always);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [target, setTarget] = useState("");
@@ -50,7 +70,7 @@ export function MailReader({
     const ctrl = new AbortController();
     setMail(null);
     setError(null);
-    setImages(false);
+    setImages(readAlways());
     setNotice(null);
     ep.getMessage(account.id, folder, uid, ctrl.signal)
       .then(async (m) => {
@@ -259,20 +279,54 @@ export function MailReader({
 
             {view === "html" && mail.has_html ? (
               <div className="reader-html">
-                {!images ? (
-                  <div className="reader-images">
-                    <span className="muted small">
-                      Externe Bilder sind blockiert – Schutz vor Tracking.
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => setImages(true)}
-                    >
-                      Bilder laden
-                    </button>
-                  </div>
-                ) : null}
+                <div className="reader-images">
+                  {!images ? (
+                    <>
+                      <span className="muted small">
+                        Externe Bilder sind blockiert – Schutz vor Tracking.
+                      </span>
+                      <span className="reader-image-actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setImages(true)}
+                        >
+                          Bilder laden
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => {
+                            writeAlways(true);
+                            setAlways(true);
+                            setImages(true);
+                          }}
+                        >
+                          Immer erlauben
+                        </button>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="muted small">
+                        {always
+                          ? "Externe Bilder werden immer geladen."
+                          : "Externe Bilder für diese Mail geladen."}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          writeAlways(false);
+                          setAlways(false);
+                          setImages(false);
+                        }}
+                      >
+                        {always ? "Wieder blockieren" : "Blockieren"}
+                      </button>
+                    </>
+                  )}
+                </div>
                 <iframe
                   key={images ? "img" : "noimg"}
                   title="Inhalt der Nachricht"

@@ -251,6 +251,16 @@ test("E-Mails: HTML-Mail sicher lesen, suchen, als ungelesen markieren", async (
   await expect(reader.getByRole("link", { name: /Abmelden/ })).toHaveAttribute("href", "https://www.netflix.com/unsubscribe");
   await page.waitForTimeout(700);
   await page.screenshot({ path: SHOTS + "desktop-mail-lesen.png" });
+  // „Immer erlauben“ bleibt gespeichert und lässt sich jederzeit zurücknehmen
+  await reader.getByRole("button", { name: "Immer erlauben" }).click();
+  await expect(reader.getByText("Externe Bilder werden immer geladen.")).toBeVisible();
+  await expect(frame).toHaveAttribute("src", /images=true/);
+  await reader.getByRole("button", { name: "Nachricht schließen" }).click();
+  await page.getByRole("button", { name: /Willkommen bei Netflix/ }).first().click();
+  await expect(reader.getByText("Externe Bilder werden immer geladen.")).toBeVisible();
+  await reader.getByRole("button", { name: "Wieder blockieren" }).click();
+  await expect(reader.getByText("Externe Bilder sind blockiert")).toBeVisible();
+  await expect(reader.locator("iframe")).not.toHaveAttribute("src", /images=true/);
   await reader.getByRole("tab", { name: "Nur Text" }).click();
   await expect(reader.getByText("Dein Konto ist jetzt aktiv.")).toBeVisible();
   await reader.getByRole("button", { name: "Als ungelesen markieren" }).click();

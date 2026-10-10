@@ -3677,3 +3677,9 @@ h3 {
 .login-switch {
   text-align: center;
 }
+
+.reader-image-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

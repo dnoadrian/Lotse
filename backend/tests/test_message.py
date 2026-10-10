@@ -117,3 +117,12 @@ def test_favicon_fetch_falls_back_to_icon_services(monkeypatch):
     assert favicons.fetch("builtbybit.com") == (png, "image/png")
     assert tried[:2] == ["https://builtbybit.com/favicon.ico", "https://www.builtbybit.com/favicon.ico"]
     assert tried[-1] == "https://icons.duckduckgo.com/ip3/builtbybit.com.ico"
+
+
+def test_favicon_also_tries_www_variant(monkeypatch):
+    from app import favicons
+
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 200
+    monkeypatch.setattr(favicons, "_image", lambda url: (png, "image/png") if url.startswith("https://www.holding-graz.at/") else None)
+    monkeypatch.setattr(favicons, "_request", lambda *a, **k: None)
+    assert favicons.fetch("holding-graz.at") == (png, "image/png")

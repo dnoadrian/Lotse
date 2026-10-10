@@ -39,7 +39,7 @@ RETRY_FAILED = timedelta(hours=6)
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/131.0 Safari/537.36")
 # Bei Änderungen am Abrufverfahren erhöhen: alte Fehlschläge werden dann sofort neu versucht
-STRATEGY = "v3"
+STRATEGY = "v4"
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
@@ -166,29 +166,32 @@ def icon_links(html: str, base: str) -> list[str]:
 
 
 def fetch(site: str) -> tuple[bytes, str] | None:
-    """Mehrstufig, damit auch Seiten mit Bot-Schutz ein Symbol bekommen:
-    1. /favicon.ico der Seite  2. Symbol-Links der Startseite  3. DuckDuckGo-Favicon-Dienst  4. Google-Favicon-Dienst.
-    Die Dienste in 3/4 sehen nur die Domain und die IP des Servers – nie den Nutzer."""
-    for url in (f"https://{site}/favicon.ico", f"https://www.{site}/favicon.ico"):
-        got = _image(url)
+    """Mehrstufig, für die Domain und ihre www.-Variante (viele Seiten laufen nur unter www.):
+    1. /favicon.ico  2. Symbol-Links der Startseite  3. DuckDuckGo  4. Google  5. gstatic.
+    Die Dienste in 3–5 sehen nur die Domain und die IP des Servers – nie den Nutzer."""
+    hosts = [site, f"www.{site}"] if not site.startswith("www.") else [site, site[4:]]
+    for host in hosts:
+        got = _image(f"https://{host}/favicon.ico")
         if got:
             return got
-    try:
-        page = _request(f"https://{site}/", "text/html,application/xhtml+xml", HTML_BYTES)
-    except (HostNotAllowed, OSError, ssl.SSLError, http.client.HTTPException, ValueError):
-        page = None
-    if page:
-        for url in icon_links(page[0].decode("utf-8", "replace"), page[1]):
+    for host in hosts:
+        try:
+            page = _request(f"https://{host}/", "text/html,application/xhtml+xml", HTML_BYTES)
+        except (HostNotAllowed, OSError, ssl.SSLError, http.client.HTTPException, ValueError):
+            page = None
+        if page:
+            for url in icon_links(page[0].decode("utf-8", "replace"), page[1]):
+                got = _image(url)
+                if got:
+                    return got
+    for host in hosts:
+        for url in (f"https://icons.duckduckgo.com/ip3/{host}.ico",
+                    f"https://www.google.com/s2/favicons?domain={host}&sz=64",
+                    f"https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL"
+                    f"&url=https://{host}&size=64"):
             got = _image(url)
             if got:
                 return got
-    for url in (f"https://icons.duckduckgo.com/ip3/{site}.ico",
-                f"https://www.google.com/s2/favicons?domain={site}&sz=64",
-                f"https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL"
-                f"&url=https://{site}&size=64"):
-        got = _image(url)
-        if got:
-            return got
     return None
 
 

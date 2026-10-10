@@ -62,9 +62,11 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if get_settings().is_production:
             response.headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
         if request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["Pragma"] = "no-cache"
-        # Kein Query-String im Log (enthält z. B. OAuth-Codes), keine Bodies, keine Cookies
+            # Routen dürfen selbst cachen lassen (Favicons: privat); sonst nie zwischenspeichern
+            if "cache-control" not in response.headers:
+                response.headers["Cache-Control"] = "no-store"
+                response.headers["Pragma"] = "no-cache"
+        # Kein Query-String im Log (enthält z. B. Ordnernamen oder Suchbegriffe), keine Bodies, keine Cookies
         log.info(
             "%s %s %s %.0fms",
             request.method,

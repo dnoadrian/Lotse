@@ -163,3 +163,43 @@ def test_jdm_matching_by_domain_and_brand(host, name, expected):
 def test_brand_matching_does_not_guess_short_or_unknown_names():
     assert identify("box-beispiel.at", get_catalog(), "Box").jdm_name is None
     assert identify("baeckerei-muster.at", get_catalog(), "Bäckerei Muster").jdm_name is None
+
+
+@pytest.mark.parametrize("subject,sender,category", [
+    ("Verify Email Address for Discord", "noreply@discord.com", "verification"),
+    ("Welcome to Discord", "noreply@discord.com", "welcome"),
+    ("Your Discord account is scheduled for deletion", "noreply@discord.com", "deletion_request"),
+    ("[Cloudflare]: Please verify your email address", "noreply@notify.cloudflare.com", "verification"),
+    ("Welcome to Cloudflare", "noreply@notify.cloudflare.com", "welcome"),
+    ("Your email address has been changed", "noreply@notify.cloudflare.com", "email_change"),
+    ("Deine E-Mail-Adresse wurde geändert", "service@paypal.de", "email_change"),
+    ("Bitte bestätige deine neue E-Mail-Adresse", "service@paypal.de", "email_new"),
+    ("Confirm your new email address", "no-reply@canva.com", "email_new"),
+    ("Dein Konto wird in 30 Tagen gelöscht", "noreply@zalando.at", "deletion_request"),
+    ("Dein Konto wurde gelöscht", "noreply@zalando.at", "deletion"),
+])
+def test_discord_cloudflare_and_lifecycle_mails(subject, sender, category):
+    c = classify(h(subject, sender))
+    assert c is not None and c.category == category
+
+
+def test_discord_and_cloudflare_resolve_to_jdm():
+    cat = get_catalog()
+    for host, name in (("discord.com", "Discord"), ("notify.cloudflare.com", "Cloudflare")):
+        ident = identify(host, cat)
+        assert ident is not None and ident.jdm_name and name.lower() in ident.jdm_name.lower()
+
+
+def test_leaving_detection_and_kind():
+    from app.scanner import deletion_kind, is_sure, leaving_detected
+
+    welcome = {"count": 1, "best": 0.9, "first": "2020-01-01T00:00:00+00:00", "last": "2020-01-01T00:00:00+00:00"}
+    later = {"count": 1, "best": 0.65, "first": "2026-01-01T00:00:00+00:00", "last": "2026-01-01T00:00:00+00:00"}
+    assert leaving_detected({"welcome": welcome, "email_change": later})
+    assert deletion_kind({"welcome": welcome, "email_change": later}) == "email_changed"
+    assert deletion_kind({"welcome": welcome, "deletion": later}) == "deleted"
+    # Nach der Änderung kam wieder eine Konto-Mail → Konto läuft weiter über dieses Postfach
+    assert not leaving_detected({"email_change": welcome, "security": later})
+    # Newsletter nach der Löschung ändern nichts
+    assert leaving_detected({"deletion": welcome, "newsletter": later})
+    assert not is_sure({"newsletter": welcome, "contact": later}) and is_sure({"order": welcome})

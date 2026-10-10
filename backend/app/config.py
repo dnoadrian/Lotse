@@ -50,10 +50,6 @@ class Settings(BaseSettings):
     imap_ca_file: str = ""  # optionale zusätzliche CA (PEM) für selbst signierte Mailserver
     imap_timeout_seconds: int = 30
 
-    # Gmail (optional)
-    google_client_id: str = ""
-    google_client_secret: str = ""
-
     # Daten
     jdm_data_dir: str = str(BASE_DIR / "data" / "jdm")
     # Gebautes Frontend direkt aus dem Backend ausliefern (Render: ein einziger Web-Dienst)
@@ -61,7 +57,6 @@ class Settings(BaseSettings):
     # Jeder darf sich ein eigenes Konto anlegen (Daten sind strikt pro Konto getrennt)
     open_registration: bool = True
     registrations_per_ip_per_hour: int = 5
-    gmail_scan_limit: int = 3000
 
     @field_validator("public_url", mode="before")
     @classmethod
@@ -102,14 +97,6 @@ class Settings(BaseSettings):
     @property
     def allowed_hosts(self) -> set[str]:
         return {h.strip().lower().rstrip(".") for h in self.imap_allowed_hosts.split(",") if h.strip()}
-
-    @property
-    def gmail_enabled(self) -> bool:
-        return bool(self.google_client_id and self.google_client_secret)
-
-    @property
-    def gmail_redirect_uri(self) -> str:
-        return f"{self.public_url}/api/oauth/google/callback"
 
     def decoded_key(self, value: str) -> bytes:
         raw = base64.b64decode(value, validate=True)

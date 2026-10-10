@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -61,29 +61,17 @@ class MailAccount(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    provider: Mapped[str] = mapped_column(String(16))  # imap | gmail
+    provider: Mapped[str] = mapped_column(String(16))  # imap
     label: Mapped[str] = mapped_column(String(80))
     email_address: Mapped[str] = mapped_column(String(254), default="")
     imap_host: Mapped[str] = mapped_column(String(253), default="")
     imap_port: Mapped[int] = mapped_column(Integer, default=993)
     username_enc: Mapped[str] = mapped_column(String(1024), default="")
-    secret_enc: Mapped[str] = mapped_column(String(4096), default="")  # IMAP-Passwort oder Gmail-Refresh-Token
+    secret_enc: Mapped[str] = mapped_column(String(4096), default="")  # IMAP-Passwort (verschlüsselt)
     status: Mapped[str] = mapped_column(String(16), default="ok")  # ok | error
     last_error: Mapped[str] = mapped_column(String(300), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class OAuthState(Base):
-    __tablename__ = "oauth_states"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    state_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"))
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    verifier_enc: Mapped[str] = mapped_column(String(512))
-    label: Mapped[str] = mapped_column(String(80))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class ScanJob(Base):
@@ -124,6 +112,8 @@ class Service(Base):
     first_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deletion_detected: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Gedächtnis je Kategorie (Anzahl, bester Wert, Datum) – bleibt, auch wenn Mails gelöscht werden
+    memory: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="offen")  # offen|angefragt|geloescht|behalten
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -140,7 +130,7 @@ class Evidence(Base):
     service_id: Mapped[int] = mapped_column(ForeignKey("services.id", ondelete="CASCADE"), index=True)
     folder: Mapped[str] = mapped_column(String(255))
     uidvalidity: Mapped[str] = mapped_column(String(32), default="")
-    msg_ref: Mapped[str] = mapped_column(String(64))  # IMAP-UID oder Gmail-Nachrichten-ID
+    msg_ref: Mapped[str] = mapped_column(String(64))  # IMAP-UID
     category: Mapped[str] = mapped_column(String(16))
     score: Mapped[float] = mapped_column(Float, default=0.0)
     sender_domain: Mapped[str] = mapped_column(String(253), default="")
@@ -157,3 +147,13 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(48))
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
     ip: Mapped[str] = mapped_column(String(64), default="")
+
+
+class Favicon(Base):
+    """Zwischengespeicherte Symbole öffentlicher Dienste (keine Nutzerdaten). Fehlschläge werden ebenfalls gemerkt."""
+    __tablename__ = "favicons"
+
+    site: Mapped[str] = mapped_column(String(253), primary_key=True)
+    data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    content_type: Mapped[str] = mapped_column(String(32), default="")
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

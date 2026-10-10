@@ -6,7 +6,7 @@ Sicherheitsprinzipien:
 - Ordnernamen werden nur verwendet, wenn der Server sie selbst per LIST geliefert hat,
   und dann korrekt gequotet → keine IMAP-Command-Injection
 - UIDs werden als Ganzzahlen validiert
-- Es werden nur ausgewählte Kopfzeilen gelesen (BODY.PEEK, setzt kein \\Seen)
+- Gelesen wird immer mit BODY.PEEK (setzt kein \\Seen); ganze Nachrichten nur zum Anzeigen, größenbegrenzt
 """
 from __future__ import annotations
 
@@ -258,16 +258,79 @@ def _chunks(seq: list[int], n: int) -> Iterator[list[int]]:
 _UID_RE = re.compile(rb"UID (\d+)")
 
 
-def fetch_headers(client: imaplib.IMAP4_SSL, uids: list[int]) -> Iterator[tuple[int, bytes]]:
+_SEEN_RE = re.compile(rb"FLAGS \(([^)]*)\)")
+
+
+def fetch_headers(client: imaplib.IMAP4_SSL, uids: list[int]) -> Iterator[tuple[int, bytes, bool]]:
+    """Kopfzeilen und Gelesen-Status (BODY.PEEK → ändert den Status nicht)."""
     for chunk in _chunks(sorted(uids), FETCH_BATCH):
-        typ, data = client.uid("FETCH", uid_set(chunk), f"(UID BODY.PEEK[HEADER.FIELDS ({HEADER_FIELDS})])")
+        typ, data = client.uid("FETCH", uid_set(chunk), f"(UID FLAGS BODY.PEEK[HEADER.FIELDS ({HEADER_FIELDS})])")
         if typ != "OK":
             raise ImapError("Nachrichten konnten nicht gelesen werden.")
         for item in data:
             if isinstance(item, tuple) and len(item) >= 2:
                 m = _UID_RE.search(item[0])
                 if m:
-                    yield int(m.group(1)), item[1][:16384]
+                    f = _SEEN_RE.search(item[0])
+                    seen = bool(f and b"\\seen" in f.group(1).lower())
+                    yield int(m.group(1)), item[1][:16384], seen
+
+
+def fetch_message(client: imaplib.IMAP4_SSL, uid: int, max_bytes: int) -> tuple[bytes, bool, bool]:
+    """Ganze Nachricht (höchstens max_bytes) ohne sie als gelesen zu markieren. → (roh, gelesen, gekürzt)"""
+    if uid <= 0:
+        raise ImapError("Ungültige UID")
+    typ, data = client.uid("FETCH", str(uid), f"(UID FLAGS RFC822.SIZE BODY.PEEK[]<0.{max_bytes}>)")
+    if typ != "OK":
+        raise ImapError("Nachricht konnte nicht gelesen werden.")
+    for item in data:
+        if isinstance(item, tuple) and len(item) >= 2:
+            f = _SEEN_RE.search(item[0])
+            size = re.search(rb"RFC822\.SIZE (\d+)", item[0])
+            truncated = bool(size and int(size.group(1)) > max_bytes)
+            return item[1][:max_bytes], bool(f and b"\\seen" in f.group(1).lower()), truncated
+    raise ImapError("Nachricht nicht gefunden.")
+
+
+def set_seen(client: imaplib.IMAP4_SSL, uids: list[int], seen: bool) -> None:
+    """Ordner muss beschreibbar ausgewählt sein."""
+    for chunk in _chunks(sorted(set(uids)), MUTATE_BATCH):
+        typ, _ = client.uid("STORE", uid_set(chunk), "+FLAGS.SILENT" if seen else "-FLAGS.SILENT", r"(\Seen)")
+        if typ != "OK":
+            raise ImapError("Status konnte nicht geändert werden.")
+
+
+def move_uids(client: imaplib.IMAP4_SSL, uids: list[int], target: Folder) -> list[int]:
+    """Verschiebt (MOVE, sonst COPY + Löschen) und gibt die UIDs zurück, die danach noch im Quellordner liegen."""
+    present = sorted(existing_uids(client, uids)) if uids else []
+    caps = {c.upper() for c in client.capabilities}
+    for chunk in _chunks(present, MUTATE_BATCH):
+        if "MOVE" in caps:
+            typ, _ = client.uid("MOVE", uid_set(chunk), quote_mailbox(target.raw))
+            if typ != "OK":
+                raise ImapError("Verschieben fehlgeschlagen.")
+        else:
+            typ, _ = client.uid("COPY", uid_set(chunk), quote_mailbox(target.raw))
+            if typ != "OK":
+                raise ImapError("Verschieben fehlgeschlagen.")
+            client.uid("STORE", uid_set(chunk), "+FLAGS.SILENT", r"(\Deleted)")
+            if "UIDPLUS" in caps:
+                client.uid("EXPUNGE", uid_set(chunk))
+            else:
+                client.expunge()
+    return sorted(existing_uids(client, present)) if present else []
+
+
+def search_text(client: imaplib.IMAP4_SSL, query: str) -> list[int]:
+    """Volltextsuche (Kopf und Text) auf dem Server. Der Begriff wird als Literal übertragen → keine Injection."""
+    if not query or len(query) > 100 or any(c in query for c in "\r\n\x00"):
+        raise ImapError("Ungültiger Suchbegriff.")
+    client.literal = query.encode("utf-8")
+    typ, data = client.uid("SEARCH", "CHARSET", "UTF-8", "TEXT")
+    if typ != "OK":
+        raise ImapError("Suche fehlgeschlagen.")
+    raw = b" ".join(d for d in data if d)
+    return sorted(int(x) for x in raw.split() if x.isdigit())
 
 
 _BODY_RE = re.compile(rb"BODY\[TEXT\]")

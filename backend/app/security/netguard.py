@@ -1,4 +1,4 @@
-"""SSRF-Schutz für vom Nutzer angegebene Mailserver.
+"""SSRF-Schutz für vom Nutzer angegebene Mailserver und für Favicon-Abrufe.
 
 Regeln:
 - Hostname muss syntaktisch gültig sein (keine IP-Literale mit Tricks, kein Userinfo, keine Ports im Namen)
@@ -55,6 +55,25 @@ def _is_public(ip: str) -> bool:
     if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
         addr = addr.ipv4_mapped
     return addr.is_global and not addr.is_multicast
+
+
+def resolve_public(host: str, port: int, resolver=socket.getaddrinfo) -> ResolvedTarget:
+    """Für Abrufe, die Quitly selbst auslöst (z. B. Favicons): nur öffentliche Adressen, keine Ausnahmen."""
+    h = normalize_host(host)
+    try:
+        ipaddress.ip_address(h)
+        raise HostNotAllowed("IP-Adressen sind nicht erlaubt")
+    except ValueError:
+        pass
+    try:
+        infos = resolver(h, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise HostNotAllowed("Server nicht gefunden") from exc
+    ips = sorted({info[4][0] for info in infos})
+    if not ips or any(not _is_public(ip) for ip in ips):
+        raise HostNotAllowed("Keine öffentliche Adresse")
+    ips.sort(key=lambda ip: ":" in ip)
+    return ResolvedTarget(host=h, port=port, ip=ips[0])
 
 
 def resolve_target(host: str, port: int, resolver=socket.getaddrinfo) -> ResolvedTarget:

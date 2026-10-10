@@ -27,6 +27,25 @@ from .headers import MailHeaders
 _P = lambda *xs: re.compile("|".join(xs), re.IGNORECASE)  # noqa: E731
 
 RULES: list[tuple[str, float, re.Pattern]] = [
+    ("deletion_request", 0.7, _P(
+        r"\b(request|anfrage|antrag)\b.{0,30}\b(delete|deletion|löschung|löschen|close|schließung)\b.{0,30}\b(account|konto|profil|data|daten)",
+        r"\b(deletion|löschung|account closure|kontoschließung)\b.{0,20}\b(request|anfrage|antrag)\b.{0,30}\b(received|erhalten|eingegangen|bestätigt|confirmed)",
+        r"\byour (\w+ )?(account|profile) (is|will be|has been) (scheduled for (deletion|removal)|deleted in|deactivated in|queued for deletion)\b",
+        r"\b(dein|ihr) (konto|account|profil) wird (in \d+ tagen )?(gelöscht|geschlossen)\b",
+        r"\b(confirm|bestätige|bestätigen)\b.{0,30}\b(account deletion|kontolöschung|löschung (deines|ihres) kontos)\b",
+    )),
+    # Neue Adresse bestätigen → das Konto läuft jetzt über DIESES Postfach (neue Seite)
+    ("email_new", 0.65, _P(
+        r"\b(confirm|verify|bestätige|bestätigen)\b.{0,25}\b(your |deine |ihre )?(new|neue)\b.{0,12}\b(e-?mail|e-?mail-?adresse|address)\b",
+        r"\b(new|neue) (e-?mail|e-?mail-?adresse)\b.{0,30}\b(confirm|verify|bestätig\w*)\b",
+    )),
+    # Adresse wurde geändert → das Konto hat dieses Postfach verlassen (alte Seite)
+    ("email_change", 0.65, _P(
+        r"\b(e-?mail( address)?|login e-?mail|sign-?in e-?mail)\b.{0,30}\b(has been|was|wurde|is being)\b.{0,15}\b(changed|updated|geändert|aktualisiert)\b",
+        r"\b(e-?mail-?adresse|e-?mail)\b.{0,20}\b(wurde|ist)\b.{0,10}\b(geändert|aktualisiert)\b",
+        r"\bchange (of|to) your e-?mail\b",
+        r"\b(email change|e-?mail-?änderung|änderung (deiner|ihrer) e-?mail)\b",
+    )),
     ("deletion", 0.75, _P(
         r"\b(account|konto|profil|profile)\b.{0,40}\b(deleted|gelöscht|geloescht|closed|geschlossen|removed|entfernt|deactivated|deaktiviert)",
         r"\b(deleted|closed|removed)\b.{0,20}\byour (account|profile)\b",
@@ -83,6 +102,9 @@ RULES: list[tuple[str, float, re.Pattern]] = [
         r"\b(receipt|quittung|kaufbeleg|zahlungsbestätigung|payment confirmation)\b",
     )),
     ("account", 0.4, _P(
+        r"^\s*\[?(confirmation|bestätigung)\]",
+        r"\b(is|ist) (now )?(active|aktiv)\b",
+        r"\b(free|pro|premium|plus|business|basic|starter|team|personal|hobby) (plan|tarif)\b",
         r"\b(your account|dein konto|ihr konto|dein account|ihr account|kundenkonto|benutzerkonto|my account|mein konto)\b",
         r"\b(log ?in|sign ?in|anmelden|einloggen) (to|bei|in) (your|dein|ihr)\b",
         r"\b(profile|profil) (updated|aktualisiert|completed|vervollständig\w*)\b",
@@ -117,10 +139,19 @@ LABELS = {
     "deletion": "Kontolöschung", "verification": "Bestätigung", "welcome": "Willkommen",
     "registration": "Registrierung", "security": "Sicherheit/Anmeldung", "subscription": "Abo/Zahlung",
     "order": "Bestellung/Rechnung", "account": "Konto-Hinweis", "newsletter": "Newsletter",
-    "contact": "Mail erhalten", "notice": "Hinweis",
+    "contact": "Mail erhalten", "notice": "Hinweis", "email_change": "E-Mail-Adresse geändert",
+    "email_new": "Neue E-Mail-Adresse",
+    "deletion_request": "Löschanfrage",
 }
+# Kategorien, die sicher auf ein bestehendes (oder ehemaliges) Konto hindeuten → Konten-Liste
+ACCOUNT_CATEGORIES = (
+    "welcome", "verification", "registration", "deletion", "deletion_request", "email_change", "email_new",
+    "security", "subscription", "order", "account", "notice",
+)
 # Kategorien, die eine Registrierung/Kontoänderung belegen (für "nur Registrierungs-Mails löschen")
-REGISTRATION_CATEGORIES = ("welcome", "verification", "registration", "deletion")
+REGISTRATION_CATEGORIES = (
+    "welcome", "verification", "registration", "deletion", "deletion_request", "email_change", "email_new",
+)
 BODY_PENALTY = 0.1
 
 
@@ -162,6 +193,12 @@ def classify(h: MailHeaders, text: str = "") -> Classification | None:
     for category, base, pattern in BODY_ONLY:
         if text and pattern.search(text):
             hits.append((base, category, f"Text: {LABELS[category]}"))
+    if any(c == "email_new" for _, c, _ in hits):
+        # "Bestätige deine neue E-Mail" ist die neue Seite, nicht der Abschied von dieser Adresse
+        hits = [h_ for h_ in hits if h_[1] != "email_change"]
+    if any(c == "deletion_request" for _, c, _ in hits):
+        # "Konto wird in 30 Tagen gelöscht" ist eine angekündigte, noch keine vollzogene Löschung
+        hits = [h_ for h_ in hits if h_[1] != "deletion"]
     if h.list_unsubscribe and not any(c == "newsletter" for _, c, _ in hits):
         hits.append((0.28, "newsletter", "Newsletter-Kennzeichen (Abmelde-Link)"))
     contact = 0.18 if automated else 0.1

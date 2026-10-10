@@ -353,6 +353,9 @@ export function auditDetailSummary(
   return parts.filter(Boolean).join(" · ");
 }
 
+export const UNCONFIRMED_HINT =
+  "Nur eine Bestätigungs-Aufforderung kam an – keine Willkommens- oder Konto-Mail danach. Vermutlich wurde die Registrierung nie abgeschlossen.";
+
 /** Woran das Ende eines Kontos erkannt wurde. */
 export function deletionBadge(s: {
   deletion_kind?: "deleted" | "email_changed" | null;

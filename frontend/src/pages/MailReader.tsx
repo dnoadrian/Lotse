@@ -12,23 +12,27 @@ import { categoryLabel, folderDisplayName } from "../lib/mappings";
 import { isSafeHttpUrl } from "../lib/url";
 
 const IMAGES_KEY = "quitly-images-always";
+const FULL_KEY = "quitly-reader-full";
 
-function readAlways(): boolean {
+function readFlag(key: string): boolean {
   try {
-    return window.localStorage.getItem(IMAGES_KEY) === "1";
+    return window.localStorage.getItem(key) === "1";
   } catch {
     return false;
   }
 }
 
-function writeAlways(on: boolean): void {
+function writeFlag(key: string, on: boolean): void {
   try {
-    if (on) window.localStorage.setItem(IMAGES_KEY, "1");
-    else window.localStorage.removeItem(IMAGES_KEY);
+    if (on) window.localStorage.setItem(key, "1");
+    else window.localStorage.removeItem(key);
   } catch {
     /* Speicher nicht verfügbar – gilt dann nur für diese Ansicht */
   }
 }
+
+const readAlways = () => readFlag(IMAGES_KEY);
+const writeAlways = (on: boolean) => writeFlag(IMAGES_KEY, on);
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${formatNumber(bytes)} B`;
@@ -65,6 +69,7 @@ export function MailReader({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [target, setTarget] = useState("");
+  const [full, setFull] = useState(() => readFlag(FULL_KEY));
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -136,7 +141,7 @@ export function MailReader({
       labelledBy={titleId}
       variant="drawer"
       initialFocus={closeRef}
-      className="reader-drawer"
+      className={`reader-drawer${full ? " reader-full" : ""}`}
     >
       <div className="drawer-head">
         <div className="drawer-title">
@@ -147,6 +152,19 @@ export function MailReader({
             <span className="muted small truncate">{mail.from}</span>
           ) : null}
         </div>
+        <button
+          type="button"
+          className="icon-btn reader-size"
+          onClick={() => {
+            writeFlag(FULL_KEY, !full);
+            setFull(!full);
+          }}
+          aria-label={full ? "Ansicht verkleinern" : "Ganze Breite nutzen"}
+          title={full ? "Ansicht verkleinern" : "Ganze Breite nutzen"}
+          aria-pressed={full}
+        >
+          <Icon name={full ? "shrink" : "expand"} />
+        </button>
         <button
           ref={closeRef}
           type="button"

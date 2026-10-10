@@ -52,12 +52,19 @@ def service_out(svc: Service, accounts: dict[int, MailAccount]) -> dict:
             "domains": list(entry.domains),
         }
     sources = []
-    for acc_id, info in (svc.sources or {}).items():
+    per_account = svc.account_memory or {}
+    # Auch Postfächer, deren Mails inzwischen gelöscht sind – das Gedächtnis je Postfach bleibt
+    for acc_id in list(svc.sources or {}) + [k for k in per_account if k not in (svc.sources or {})]:
         acc = accounts.get(int(acc_id))
-        if acc:
-            sources.append({"account_id": acc.id, "label": acc.label, "provider": acc.provider,
-                            "messages": info.get("messages", 0), "signals": info.get("signals", 0),
-                            "senders": info.get("senders", 0)})
+        if not acc:
+            continue
+        info = (svc.sources or {}).get(acc_id, {})
+        mem = per_account.get(acc_id) or {}
+        left = scanner.deletion_kind(mem) if scanner.leaving_detected(mem) else None
+        sources.append({"account_id": acc.id, "label": acc.label, "provider": acc.provider,
+                        "messages": info.get("messages", 0), "signals": info.get("signals", 0),
+                        "senders": info.get("senders", 0), "left": left,
+                        "unconfirmed": scanner.unconfirmed(mem) if mem else False})
     return {
         "id": svc.id,
         "name": svc.display_name,
@@ -75,7 +82,8 @@ def service_out(svc: Service, accounts: dict[int, MailAccount]) -> dict:
         "deletion_detected": svc.deletion_detected,
         "deletion_requested_by_mail": "deletion_request" in (svc.memory or {}),
         "email_changed": "email_change" in (svc.memory or {}),
-        "deletion_kind": scanner.deletion_kind(svc.memory) if svc.deletion_detected else None,
+        "deletion_kind": scanner.service_leaving_kind(svc) if svc.deletion_detected else None,
+        "unconfirmed": scanner.unconfirmed(svc.memory or {}),
         "mails_in_mailbox": svc.signal_count,
         "memory_only": bool(svc.memory) and svc.signal_count == 0,
         "lifecycle": lifecycle(svc),
@@ -231,7 +239,7 @@ def set_status(service_id: int, body: StatusIn, request: Request, auth: Auth = D
     svc = db.get(Service, service_id)
     if svc is None or svc.user_id != auth.user.id:
         raise HTTPException(404, "Dienst nicht gefunden.")
-    svc.status, svc.status_changed_at = body.status, utcnow()
+    svc.status, svc.status_changed_at, svc.status_auto = body.status, utcnow(), False
     db.commit()
     audit.record(db, "service_status", auth.user.id, request, service_id=svc.id, status=body.status)
     return service_out(svc, _accounts(db, auth.user.id))
@@ -245,7 +253,7 @@ def bulk_status(body: BulkStatusIn, request: Request, auth: Auth = Depends(requi
         raise HTTPException(404, "Mindestens ein Dienst wurde nicht gefunden.")
     now = utcnow()
     for svc in rows:
-        svc.status, svc.status_changed_at = body.status, now
+        svc.status, svc.status_changed_at, svc.status_auto = body.status, now, False
     db.commit()
     audit.record(db, "service_status_bulk", auth.user.id, request, count=len(rows), status=body.status)
     return {"updated": len(rows)}

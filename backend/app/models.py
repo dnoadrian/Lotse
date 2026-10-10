@@ -114,8 +114,12 @@ class Service(Base):
     deletion_detected: Mapped[bool] = mapped_column(Boolean, default=False)
     # Gedächtnis je Kategorie (Anzahl, bester Wert, Datum) – bleibt, auch wenn Mails gelöscht werden
     memory: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Dasselbe Gedächtnis je Postfach ({"<account_id>": {kategorie: {...}}}) – für "pro Postfach gelöscht/gewechselt"
+    account_memory: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="offen")  # offen|angefragt|geloescht|behalten
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Status wurde automatisch aus Mails gesetzt (nicht vom Nutzer) → darf sich mit neuen Mails wieder ändern
+    status_auto: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Evidence(Base):

@@ -12,17 +12,24 @@ Sicherheit (SSRF):
 """
 from __future__ import annotations
 
+import asyncio
 import html as _html
 import http.client
+import logging
 import re
-import zlib
 import socket
 import ssl
+import time
+import zlib
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import timedelta
 from urllib.parse import urljoin, urlsplit
 
-from fastapi.concurrency import run_in_threadpool
+import anyio
 from sqlalchemy.orm import Session
+
+from .config import get_settings
 
 from .detection.resolver import registrable_domain
 from .jdm.catalog import get_catalog
@@ -34,12 +41,20 @@ HTML_BYTES = 512 * 1024
 TIMEOUT = 5
 MAX_REDIRECTS = 3
 FRESH = timedelta(days=14)
-RETRY_FAILED = timedelta(hours=6)
+RETRY_FAILED = timedelta(hours=1)
+# Gesamtzeit pro Stufe – eine einzelne hängende Seite blockiert so nicht alles andere
+PHASE_SECONDS = 9
 # Viele Seiten (Cloudflare, Akamai) weisen unbekannte Programme ab – daher eine übliche Browser-Kennung
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/131.0 Safari/537.36")
 # Bei Änderungen am Abrufverfahren erhöhen: alte Fehlschläge werden dann sofort neu versucht
-STRATEGY = "v4"
+STRATEGY = "v5"
+
+log = logging.getLogger("quitly.favicons")
+# Eigener Pool: Favicon-Abrufe dürfen nie die Threads der übrigen API belegen
+_POOL = ThreadPoolExecutor(max_workers=32, thread_name_prefix="favicon")
+_LIMIT = anyio.CapacityLimiter(5)
+_INFLIGHT: dict[str, asyncio.Future] = {}
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
@@ -72,6 +87,8 @@ def sniff(data: bytes) -> str | None:
         return "image/jpeg"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
+    if data[4:8] == b"ftyp" and data[8:12] in (b"avif", b"avis"):
+        return "image/avif"
     head = data[:4096].lstrip(b"\xef\xbb\xbf \t\r\n").lower()
     if (head.startswith(b"<svg") or head.startswith((b"<?xml", b"<!--", b"<!doctype svg"))) and b"<svg" in head:
         body = data.lower()
@@ -81,12 +98,14 @@ def sniff(data: bytes) -> str | None:
     return None
 
 
-def _request(url: str, accept: str, max_bytes: int) -> tuple[bytes, str] | None:
-    """GET mit SSRF-Prüfung bei jedem Sprung. → (Daten, endgültige URL) bei 200, sonst None."""
+def _request(url: str, accept: str, max_bytes: int, why: list[str] | None = None) -> tuple[bytes, str] | None:
+    """GET mit SSRF-Prüfung bei jedem Sprung. → (Daten, endgültige URL) bei 200, sonst None (Grund in `why`)."""
+    why = why if why is not None else []
     ctx = _context()
     for _ in range(MAX_REDIRECTS + 1):
         parts = urlsplit(url)
         if parts.scheme != "https" or parts.port not in (None, 443) or parts.username or parts.password:
+            why.append(f"{url}: kein HTTPS")
             return None
         host = normalize_host(parts.hostname or "")
         target = resolve_public(host, 443)
@@ -101,12 +120,15 @@ def _request(url: str, accept: str, max_bytes: int) -> tuple[bytes, str] | None:
                 url = urljoin(url, resp.getheader("Location") or "")
                 continue
             if resp.status != 200:
+                why.append(f"{url}: HTTP {resp.status}")
                 return None
             length = resp.getheader("Content-Length")
             if length and length.isdigit() and int(length) > max_bytes:
+                why.append(f"{url}: zu groß")
                 return None
             data = resp.read(max_bytes + 1)
             if len(data) > max_bytes:
+                why.append(f"{url}: zu groß")
                 return None
             encoding = (resp.getheader("Content-Encoding") or "").lower()
             if encoding in ("gzip", "x-gzip", "deflate"):
@@ -116,24 +138,37 @@ def _request(url: str, accept: str, max_bytes: int) -> tuple[bytes, str] | None:
                 if len(data) > max_bytes:
                     return None
             elif encoding not in ("", "identity"):
+                why.append(f"{url}: Kodierung {encoding}")
                 return None
             return data, url
         finally:
             conn.close()
+    why.append(f"{url}: zu viele Weiterleitungen")
     return None
 
 
-def _image(url: str) -> tuple[bytes, str] | None:
+_NET_ERRORS = (HostNotAllowed, OSError, ssl.SSLError, http.client.HTTPException, ValueError, zlib.error)
+
+
+def _image(url: str, why: list[str] | None = None) -> tuple[bytes, str] | None:
+    why = why if why is not None else []
     try:
-        got = _request(url, "image/avif,image/webp,image/png,image/*;q=0.8,*/*;q=0.5", MAX_BYTES)
-    except (HostNotAllowed, OSError, ssl.SSLError, http.client.HTTPException, ValueError):
+        got = _request(url, "image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5", MAX_BYTES, why)
+    except _NET_ERRORS as exc:
+        why.append(f"{url}: {type(exc).__name__}")
         return None
     if not got:
         return None
     data = got[0]
     ctype = sniff(data)
+    if not ctype:
+        why.append(f"{url}: kein Bild")
+        return None
     # Winzige Platzhalter (z. B. leere 1×1-Bilder) zählen nicht
-    return (data, ctype) if ctype and len(data) >= 100 else None
+    if len(data) < 100:
+        why.append(f"{url}: Platzhalter")
+        return None
+    return data, ctype
 
 
 _LINK = re.compile(r"<link\b[^>]*>", re.I)
@@ -165,34 +200,63 @@ def icon_links(html: str, base: str) -> list[str]:
     return [u for _, u in found][:4]
 
 
-def fetch(site: str) -> tuple[bytes, str] | None:
-    """Mehrstufig, für die Domain und ihre www.-Variante (viele Seiten laufen nur unter www.):
-    1. /favicon.ico  2. Symbol-Links der Startseite  3. DuckDuckGo  4. Google  5. gstatic.
-    Die Dienste in 3–5 sehen nur die Domain und die IP des Servers – nie den Nutzer."""
-    hosts = [site, f"www.{site}"] if not site.startswith("www.") else [site, site[4:]]
-    for host in hosts:
-        got = _image(f"https://{host}/favicon.ico")
+def _from_homepage(host: str, why: list[str]) -> tuple[bytes, str] | None:
+    try:
+        page = _request(f"https://{host}/", "text/html,application/xhtml+xml", HTML_BYTES, why)
+    except _NET_ERRORS as exc:
+        why.append(f"https://{host}/: {type(exc).__name__}")
+        return None
+    if not page:
+        return None
+    for url in icon_links(page[0].decode("utf-8", "replace"), page[1]):
+        got = _image(url, why)
         if got:
             return got
-    for host in hosts:
-        try:
-            page = _request(f"https://{host}/", "text/html,application/xhtml+xml", HTML_BYTES)
-        except (HostNotAllowed, OSError, ssl.SSLError, http.client.HTTPException, ValueError):
-            page = None
-        if page:
-            for url in icon_links(page[0].decode("utf-8", "replace"), page[1]):
-                got = _image(url)
-                if got:
-                    return got
-    for host in hosts:
-        for url in (f"https://icons.duckduckgo.com/ip3/{host}.ico",
-                    f"https://www.google.com/s2/favicons?domain={host}&sz=64",
-                    f"https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL"
-                    f"&url=https://{host}&size=64"):
-            got = _image(url)
+    return None
+
+
+def _best(tasks: list, why: list[str]) -> tuple[bytes, str] | None:
+    """Alle Abrufe einer Stufe parallel; Ergebnis nach Rangfolge der Liste, gemeinsames Zeitlimit."""
+    futures = [_POOL.submit(task) for task in tasks]
+    deadline = time.monotonic() + PHASE_SECONDS
+    try:
+        for fut in futures:
+            try:
+                got = fut.result(timeout=max(0.0, deadline - time.monotonic()))
+            except FutureTimeout:
+                why.append("Zeitlimit")
+                continue
+            except Exception as exc:  # noqa: BLE001 – ein Fehler darf die anderen Wege nicht abbrechen
+                why.append(type(exc).__name__)
+                continue
             if got:
                 return got
-    return None
+        return None
+    finally:
+        for fut in futures:
+            fut.cancel()
+
+
+def fetch(site: str, why: list[str] | None = None) -> tuple[bytes, str] | None:
+    """Zwei Stufen, jeweils für die Domain und ihre www.-Variante (viele Seiten laufen nur unter www.):
+    1. die Seite selbst: /favicon.ico und die Symbol-Links der Startseite
+    2. Symboldienste: DuckDuckGo, Google, gstatic – sie sehen nur die Domain und die IP des Servers, nie den Nutzer."""
+    why = why if why is not None else []
+    hosts = [site, f"www.{site}"] if not site.startswith("www.") else [site, site[4:]]
+    own = [lambda h=h: _image(f"https://{h}/favicon.ico", why) for h in hosts]
+    own += [lambda h=h: _from_homepage(h, why) for h in hosts]
+    got = _best(own, why)
+    if got:
+        return got
+    services = []
+    for h in hosts:
+        services += [
+            lambda h=h: _image(f"https://icons.duckduckgo.com/ip3/{h}.ico", why),
+            lambda h=h: _image(f"https://www.google.com/s2/favicons?domain={h}&sz=64", why),
+            lambda h=h: _image("https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL"
+                               f"&url=https://{h}&size=64", why),
+        ]
+    return _best(services, why)
 
 
 def sites_for(svc: Service) -> list[str]:
@@ -219,11 +283,32 @@ def site_for(svc: Service) -> str | None:
 
 
 def fetch_any(sites: list[str]) -> tuple[bytes, str] | None:
+    why: list[str] = []
     for site in sites:
-        got = fetch(site)
+        got = fetch(site, why)
         if got:
             return got
+    if get_settings().favicon_debug:
+        # Nur Domains und Fehlerarten – keine Nutzer- oder Maildaten
+        log.info("Kein Favicon für %s: %s", ", ".join(sites), "; ".join(why[:40]))
     return None
+
+
+async def _fetch_once(sites: list[str]) -> tuple[bytes, str] | None:
+    """Gleichzeitige Anfragen für dieselbe Seite teilen sich einen Abruf."""
+    key = sites[0]
+    pending = _INFLIGHT.get(key)
+    if pending is not None:
+        return await asyncio.shield(pending)
+    fut = asyncio.get_running_loop().create_future()
+    _INFLIGHT[key] = fut
+    got = None
+    try:
+        got = await anyio.to_thread.run_sync(fetch_any, sites, limiter=_LIMIT)
+        return got
+    finally:
+        _INFLIGHT.pop(key, None)
+        fut.set_result(got)
 
 
 async def get_icon(db: Session, sites: list[str] | str | None) -> tuple[bytes, str] | None:
@@ -241,7 +326,8 @@ async def get_icon(db: Session, sites: list[str] | str | None) -> tuple[bytes, s
             return row.data, row.content_type
         if not row.data and age < RETRY_FAILED and row.content_type == f"fail:{STRATEGY}":
             return None
-    got = await run_in_threadpool(fetch_any, sites)
+    got = await _fetch_once(sites)
+    row = db.get(Favicon, site)
     if row is None:
         row = Favicon(site=site)
         db.add(row)

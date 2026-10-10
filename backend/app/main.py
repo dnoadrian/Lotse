@@ -24,7 +24,7 @@ def _migrate(conn) -> None:
     """Kleine, additive Schema-Änderungen für bestehende Installationen."""
     additions = {
         "evidence": {"reasons": "JSON"},
-        "services": {"memory": "JSON"},
+        "services": {"memory": "JSON", "account_memory": "JSON", "status_auto": "BOOLEAN NOT NULL DEFAULT FALSE"},
     }
     insp = inspect(conn)
     for table, columns in additions.items():
@@ -32,6 +32,10 @@ def _migrate(conn) -> None:
         for name, sqltype in columns.items():
             if name not in present:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sqltype}"))
+                if (table, name) == ("services", "status_auto"):
+                    # Bisher automatisch erkannte Löschungen dürfen sich künftig wieder ändern
+                    conn.execute(text("UPDATE services SET status_auto = TRUE "
+                                      "WHERE status = 'geloescht' AND deletion_detected = TRUE"))
 
 
 def _reset_stale_jobs() -> None:

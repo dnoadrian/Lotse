@@ -97,7 +97,7 @@ def test_favicon_tries_all_candidate_sites(monkeypatch):
     from app import favicons
 
     seen = []
-    monkeypatch.setattr(favicons, "fetch", lambda site: seen.append(site) or ((b"x", "image/png") if site == "petpanda.at" else None))
+    monkeypatch.setattr(favicons, "fetch", lambda site, why=None: seen.append(site) or ((b"x", "image/png") if site == "petpanda.at" else None))
     assert favicons.fetch_any(["mailer-petpanda.com", "petpanda.at"]) == (b"x", "image/png")
     assert seen == ["mailer-petpanda.com", "petpanda.at"]
 
@@ -108,21 +108,58 @@ def test_favicon_fetch_falls_back_to_icon_services(monkeypatch):
     tried = []
     png = b"\x89PNG\r\n\x1a\n" + b"0" * 200
 
-    def fake_image(url):
+    def fake_image(url, why=None):
         tried.append(url)
         return (png, "image/png") if "duckduckgo" in url else None
 
     monkeypatch.setattr(favicons, "_image", fake_image)
     monkeypatch.setattr(favicons, "_request", lambda *a, **k: None)  # Startseite blockiert (Bot-Schutz)
     assert favicons.fetch("builtbybit.com") == (png, "image/png")
-    assert tried[:2] == ["https://builtbybit.com/favicon.ico", "https://www.builtbybit.com/favicon.ico"]
-    assert tried[-1] == "https://icons.duckduckgo.com/ip3/builtbybit.com.ico"
+    assert {"https://builtbybit.com/favicon.ico", "https://www.builtbybit.com/favicon.ico"} <= set(tried)
+    assert "https://icons.duckduckgo.com/ip3/builtbybit.com.ico" in tried
 
 
 def test_favicon_also_tries_www_variant(monkeypatch):
     from app import favicons
 
     png = b"\x89PNG\r\n\x1a\n" + b"0" * 200
-    monkeypatch.setattr(favicons, "_image", lambda url: (png, "image/png") if url.startswith("https://www.holding-graz.at/") else None)
+    monkeypatch.setattr(favicons, "_image", lambda url, why=None: (png, "image/png") if url.startswith("https://www.holding-graz.at/") else None)
     monkeypatch.setattr(favicons, "_request", lambda *a, **k: None)
     assert favicons.fetch("holding-graz.at") == (png, "image/png")
+
+
+def test_favicon_prefers_site_icon_and_survives_slow_or_broken_paths(monkeypatch):
+    import time as _t
+
+    from app import favicons
+
+    ico = b"\x00\x00\x01\x00" + b"0" * 200
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 200
+
+    def fake_image(url, why=None):
+        if url == "https://github.com/favicon.ico":
+            _t.sleep(0.2)  # langsamer, aber vorrangig
+            return (ico, "image/x-icon")
+        if url.startswith("https://www."):
+            raise RuntimeError("kaputt")
+        return (png, "image/png")
+
+    monkeypatch.setattr(favicons, "_image", fake_image)
+    monkeypatch.setattr(favicons, "_request", lambda *a, **k: None)
+    assert favicons.fetch("github.com") == (ico, "image/x-icon")
+
+    def hanging(url, why=None):
+        if "duckduckgo" in url:
+            return (png, "image/png")
+        _t.sleep(5)
+        return None
+
+    monkeypatch.setattr(favicons, "_image", hanging)
+    monkeypatch.setattr(favicons, "PHASE_SECONDS", 0.3)
+    started = _t.monotonic()
+    assert favicons.fetch("hangs.example") == (png, "image/png")
+    assert _t.monotonic() - started < 2
+
+
+def test_avif_is_recognized():
+    assert sniff(b"\x00\x00\x00\x1cftypavif" + b"0" * 50) == "image/avif"

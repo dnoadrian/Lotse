@@ -319,19 +319,80 @@ def leaving_detected(memory: dict) -> bool:
     return leave_last is not None and leave_last >= other_last
 
 
+CONFIRMING_CATEGORIES = tuple(c for c in ACCOUNT_CATEGORIES if c != "verification")
+
+
+def unconfirmed(memory: dict) -> bool:
+    """Nur eine Aufforderung zur Bestätigung kam – aber nie Willkommen, Login, Bestellung o. Ä.
+    → vermutlich wurde die Registrierung nie abgeschlossen."""
+    mem = memory or {}
+    return "verification" in mem and not any(c in mem for c in CONFIRMING_CATEGORIES)
+
+
+def _last_any(memory: dict) -> datetime | None:
+    return max((d for cat in memory for d in [_last(memory, cat)] if d), default=None)
+
+
+def _leave_at(memory: dict) -> datetime | None:
+    return max((d for c in LEAVING_CATEGORIES for d in [_last(memory, c)] if d), default=None)
+
+
+def _per_account(svc: Service) -> dict[str, dict]:
+    return {k: v for k, v in (svc.account_memory or {}).items() if v}
+
+
+def service_left(svc: Service) -> bool:
+    """Pro Postfach statt global: Wechselt die Adresse von Postfach A nach B, ist das Konto bei A "gewechselt",
+    bei B aber aktiv – insgesamt also nicht gelöscht. Erst wenn kein Postfach mehr aktiv ist, gilt es als beendet."""
+    per = _per_account(svc)
+    if not per:
+        return leaving_detected(svc.memory or {})
+    left = {k: leaving_detected(m) for k, m in per.items()}
+    if not any(left.values()):
+        return False
+    leave_at = max((d for k, m in per.items() if left[k] for d in [_leave_at(m)] if d), default=None)
+    for k, m in per.items():
+        if left[k]:
+            continue
+        if is_sure(m):
+            return False  # dort gibt es ein eigenes, aktives Konto (z. B. die neue Adresse)
+        last = _last_any(m)
+        if last and leave_at and last > leave_at:
+            return False  # nach dem Wechsel kommen dort weiter Mails an
+    return True
+
+
+def service_leaving_kind(svc: Service) -> str:
+    per = _per_account(svc)
+    if not per:
+        return deletion_kind(svc.memory or {})
+    kinds = {deletion_kind(m) for m in per.values() if leaving_detected(m)}
+    return "deleted" if "deleted" in kinds or not kinds else "email_changed"
+
+
 def recompute(db, user_id: int) -> None:
     """Kennzahlen aller Dienste aus aktuellen Belegen + Gedächtnis neu berechnen."""
     existing = {s.key: s for s in db.execute(select(Service).where(Service.user_id == user_id)).scalars()}
     accounts = {str(a) for a in db.execute(select(MailAccount.id).where(MailAccount.user_id == user_id)).scalars()}
     by_service: dict[int, list[Evidence]] = defaultdict(list)
+    by_account: dict[int, dict[str, list[Evidence]]] = defaultdict(lambda: defaultdict(list))
     for ev in db.execute(select(Evidence).where(Evidence.user_id == user_id)).scalars():
         by_service[ev.service_id].append(ev)
+        by_account[ev.service_id][str(ev.account_id)].append(ev)
     now = utcnow()
     for svc in existing.values():
         if any(k not in accounts for k in (svc.sources or {})):
             svc.sources = {k: v for k, v in (svc.sources or {}).items() if k in accounts}
         evs = by_service.get(svc.id, [])
         svc.memory = _remember(svc.memory or {}, evs)
+        old = {k: v for k, v in (svc.account_memory or {}).items() if k in accounts}
+        current = by_account.get(svc.id, {})
+        if svc.account_memory is None:
+            # Erstes Mal (ältere Installation): bei genau einem Postfach gehört das bisherige Gedächtnis dorthin
+            keys = (set(svc.sources or {}) | set(current)) & accounts
+            if len(keys) == 1:
+                old = {next(iter(keys)): dict(svc.memory or {})}
+        svc.account_memory = {k: _remember(old.get(k, {}), current.get(k, [])) for k in set(old) | set(current)}
         src = svc.sources or {}
         svc.message_count = sum(int(v.get("messages", 0)) for v in src.values())
         svc.sender_count = sum(int(v.get("senders", 0)) for v in src.values())
@@ -340,11 +401,15 @@ def recompute(db, user_id: int) -> None:
         svc.confidence = memory_confidence(svc.memory)
 
         mem = svc.memory
-        svc.deletion_detected = leaving_detected(mem)
+        svc.deletion_detected = service_left(svc)
         if svc.deletion_detected and svc.status in ("offen", "angefragt"):
-            svc.status, svc.status_changed_at = "geloescht", now
+            svc.status, svc.status_changed_at, svc.status_auto = "geloescht", now, True
+        elif not svc.deletion_detected and svc.status == "geloescht" and svc.status_auto:
+            # automatisch gesetzt, trifft aber nicht mehr zu (z. B. Konto unter der neuen Adresse aktiv)
+            svc.status = "angefragt" if "deletion_request" in mem else "offen"
+            svc.status_changed_at = now
         elif "deletion_request" in mem and svc.status == "offen":
-            svc.status, svc.status_changed_at = "angefragt", now
+            svc.status, svc.status_changed_at, svc.status_auto = "angefragt", now, True
 
         if not is_sure(mem) and svc.status == "offen":
             # nie sicher erkannt (nur Newsletter/Kontakt) → verwerfen; Belege hängen per Fremdschlüssel daran

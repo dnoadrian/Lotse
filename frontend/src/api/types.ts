@@ -140,9 +140,12 @@ export interface ServiceSource {
   account_id: number;
   label: string;
   provider: Provider;
-    messages: number;
+  messages: number;
   signals: number;
   senders?: number;
+  /** Nur dieses Postfach: Konto hier gelöscht bzw. Adresse von hier weg gewechselt */
+  left?: "deleted" | "email_changed" | null;
+  unconfirmed?: boolean;
 }
 
 export interface Service {
@@ -163,6 +166,8 @@ export interface Service {
   deletion_kind?: "deleted" | "email_changed" | null;
   deletion_requested_by_mail?: boolean;
   email_changed?: boolean;
+  /** Nur eine Aufforderung zur Bestätigung kam, nie eine Konto-Mail danach */
+  unconfirmed?: boolean;
   mails_in_mailbox?: number;
   memory_only?: boolean;
   lifecycle?: Lifecycle | null;

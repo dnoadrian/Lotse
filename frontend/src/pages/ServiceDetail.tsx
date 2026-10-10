@@ -12,6 +12,7 @@ import { formatDate, formatDateTime, formatNumber } from "../lib/format";
 import {
   confidencePercent,
   deletionBadge,
+  UNCONFIRMED_HINT,
   difficultyMeta,
   providerLabel,
   qualityMeta,
@@ -43,7 +44,11 @@ export function ServiceDetail({
       .then((m) => {
         if (ctrl.signal.aborted) return;
         // Bei gewähltem Postfach nur dessen Mails zeigen
-        setMails(mailboxId ? { ...m, items: m.items.filter((x) => x.account_id === mailboxId) } : m);
+        setMails(
+          mailboxId
+            ? { ...m, items: m.items.filter((x) => x.account_id === mailboxId) }
+            : m,
+        );
       })
       .catch((err) => {
         if (!ctrl.signal.aborted) setMailsError(errorText(err));
@@ -111,6 +116,11 @@ export function ServiceDetail({
             <span className="badge badge-green">{deletionBadge(service)}</span>
           ) : null}
         </div>
+        {service.unconfirmed && !service.deletion_detected ? (
+          <p className="hint-note small no-margin">
+            <Icon name="info" size={16} /> {UNCONFIRMED_HINT}
+          </p>
+        ) : null}
         {service.lifecycle === "likely_deleted" ? (
           <div className="hint-card hint-inline">
             <p className="no-margin">
@@ -344,6 +354,11 @@ export function ServiceDetail({
                   {providerLabel(s.provider)} · {formatNumber(s.messages)} Mails
                   · {formatNumber(s.signals)} Signale
                 </span>
+                {s.left ? (
+                  <span className="badge badge-green self-start">
+                    {deletionBadge({ deletion_kind: s.left })}
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>

@@ -94,3 +94,7 @@ Bewahre beides getrennt und verschlüsselt auf.
 | Zertifikat wird nicht ausgestellt | DNS prüfen, Port 80 erreichbar? `docker compose logs caddy` |
 | „Der Server löst auf eine interne Adresse auf“ | Mailserver in `QUITLY_IMAP_ALLOWED_HOSTS` eintragen |
 | „TLS-Zertifikat … ungültig“ | Zertifikat des Mailservers erneuern oder eigene CA einbinden |
+
+## Fehlende Favicons untersuchen
+
+Fehlt bei einem Dienst das Symbol, `QUITLY_FAVICON_DEBUG=true` setzen (auf Render unter *Environment*) und die Konten-Seite neu laden. Im Log steht dann je Domain, woran der Abruf scheiterte (z. B. `HTTP 403`, `Zeitlimit`, `kein Bild`) – ohne Nutzer- oder Maildaten. Fehlschläge werden nach einer Stunde erneut versucht. Danach die Option wieder entfernen.

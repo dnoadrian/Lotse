@@ -3028,11 +3028,26 @@ h3 {
 
 /* Lese-Ansicht */
 .reader-drawer {
-  width: min(760px, 100%);
+  width: min(1180px, 94vw);
+  transition: width 0.3s var(--ease);
+}
+
+.reader-drawer.reader-full {
+  width: 100%;
+}
+
+.reader-drawer .drawer-body {
+  gap: 16px;
+}
+
+.reader-drawer .drawer-title h2 {
+  font-size: 22px;
 }
 
 .reader-meta {
   font-size: 13.5px;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  column-gap: 14px;
 }
 
 .reader-actions {
@@ -3105,7 +3120,7 @@ h3 {
 .reader-html iframe {
   display: block;
   width: 100%;
-  height: min(70vh, 900px);
+  height: max(560px, calc(100vh - 290px));
   border: 0;
   background: #ffffff;
 }
@@ -3115,11 +3130,10 @@ h3 {
   padding: 16px;
   border-radius: 14px;
   background: var(--surface-2);
-  font: 14px/1.6 var(--font);
+  font: 15px/1.65 var(--font);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 70vh;
-  overflow: auto;
+  min-height: max(400px, calc(100vh - 340px));
 }
 
 /* Konten: erkannte Mails, Erklärung, Hinweise */
@@ -3234,7 +3248,19 @@ h3 {
   }
 
   .reader-html iframe {
-    height: 60vh;
+    height: 72vh;
+  }
+
+  .reader-drawer {
+    width: 100%;
+  }
+
+  .reader-meta {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .reader-size {
+    display: none;
   }
 }
 
@@ -3682,4 +3708,28 @@ h3 {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* Hinweis: nur Bestätigungs-Aufforderung, keine Konto-Mail danach */
+.badge-note {
+  background: transparent;
+  color: var(--muted);
+  border: 1px dashed var(--strong);
+  cursor: help;
+}
+
+.hint-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--strong);
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.hint-note svg {
+  flex: none;
+  margin-top: 2px;
 }

@@ -18,6 +18,7 @@ import { Banner, PageHeader, Spinner, useIsPhone } from "../components/ui";
 import { formatDateTime, formatLooseDate, formatNumber } from "../lib/format";
 import {
   deletionBadge,
+  UNCONFIRMED_HINT,
   STATUS_META,
   type LinkFilter,
   type QualityFilter,
@@ -309,6 +310,10 @@ export function ServicesPage() {
           message_count: src.messages,
           signal_count: src.signals,
           sender_count: src.senders ?? s.sender_count,
+          // Gelöscht/gewechselt gilt nur für das Postfach, in dem es passiert ist
+          deletion_detected: !!src.left,
+          deletion_kind: src.left ?? null,
+          unconfirmed: src.unconfirmed ?? s.unconfirmed,
         },
       ];
     });
@@ -650,13 +655,17 @@ export function ServicesPage() {
                     <span>Postfach</span>
                     <select
                       value={mailboxF ?? ""}
-                      onChange={(e) => chooseMailbox(Number(e.target.value) || null)}
+                      onChange={(e) =>
+                        chooseMailbox(Number(e.target.value) || null)
+                      }
                     >
                       <option value="">Alle Postfächer</option>
                       {accountList.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.label}
-                          {a.email_address && a.email_address !== a.label ? ` (${a.email_address})` : ""}
+                          {a.email_address && a.email_address !== a.label
+                            ? ` (${a.email_address})`
+                            : ""}
                         </option>
                       ))}
                     </select>
@@ -792,6 +801,13 @@ export function ServicesPage() {
                           <span className="badge badge-green self-start">
                             {deletionBadge(s)}
                           </span>
+                        ) : s.unconfirmed ? (
+                          <span
+                            className="badge badge-note self-start"
+                            title={UNCONFIRMED_HINT}
+                          >
+                            Unbestätigt
+                          </span>
                         ) : null}
                         <div className="svc-card-actions">
                           <DeleteLink service={s} block />
@@ -874,6 +890,13 @@ export function ServicesPage() {
                                 {s.deletion_detected ? (
                                   <span className="badge badge-green">
                                     {deletionBadge(s)}
+                                  </span>
+                                ) : s.unconfirmed ? (
+                                  <span
+                                    className="badge badge-note"
+                                    title={UNCONFIRMED_HINT}
+                                  >
+                                    Unbestätigt
                                   </span>
                                 ) : null}
                               </span>

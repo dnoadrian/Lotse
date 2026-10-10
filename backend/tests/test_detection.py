@@ -203,3 +203,87 @@ def test_leaving_detection_and_kind():
     # Newsletter nach der Löschung ändern nichts
     assert leaving_detected({"deletion": welcome, "newsletter": later})
     assert not is_sure({"newsletter": welcome, "contact": later}) and is_sure({"order": welcome})
+
+
+def _add(db, user, acc, svc, cat, when, ref):
+    from datetime import datetime, timezone
+
+    from app.models import Evidence
+    db.add(Evidence(user_id=user.id, account_id=acc.id, service_id=svc.id, folder="INBOX", uidvalidity="1",
+                    msg_ref=str(ref), category=cat, score=0.8, sender_domain="canva.com",
+                    received_at=datetime.fromisoformat(when).replace(tzinfo=timezone.utc)))
+
+
+def test_email_change_counts_only_for_the_old_mailbox(db):
+    """Adresse von alt@ nach neu@ gewechselt: nur das alte Postfach zeigt "gewechselt", das Konto lebt weiter."""
+    from app.models import MailAccount, Service
+    from app.scanner import recompute
+    from tests.conftest import make_user
+
+    user = make_user(db)
+    old = MailAccount(user_id=user.id, provider="imap", label="alt@x.test")
+    new = MailAccount(user_id=user.id, provider="imap", label="neu@x.test")
+    db.add_all([old, new])
+    db.flush()
+    svc = Service(user_id=user.id, key="jdm:Canva", display_name="Canva", sources={str(old.id): {}, str(new.id): {}},
+                  memory={}, status="offen")
+    db.add(svc)
+    db.flush()
+    _add(db, user, old, svc, "welcome", "2020-01-01", 1)
+    _add(db, user, old, svc, "email_change", "2025-01-01", 2)
+    _add(db, user, new, svc, "email_new", "2025-01-01", 3)
+    db.flush()
+    recompute(db, user.id)
+    db.commit()
+    assert not svc.deletion_detected and svc.status == "offen"
+
+    from app.routers.services import service_out
+    out = service_out(svc, {old.id: old, new.id: new})
+    left = {s["label"]: s["left"] for s in out["sources"]}
+    assert left == {"alt@x.test": "email_changed", "neu@x.test": None}
+    assert out["deletion_kind"] is None
+
+
+def test_email_change_to_unknown_mailbox_still_counts_and_auto_status_reverts(db):
+    from app.models import MailAccount, Service
+    from app.scanner import recompute
+    from tests.conftest import make_user
+
+    user = make_user(db)
+    old = MailAccount(user_id=user.id, provider="imap", label="alt@x.test")
+    db.add(old)
+    db.flush()
+    svc = Service(user_id=user.id, key="jdm:Canva", display_name="Canva", sources={str(old.id): {}},
+                  memory={}, status="offen")
+    db.add(svc)
+    db.flush()
+    _add(db, user, old, svc, "welcome", "2020-01-01", 1)
+    _add(db, user, old, svc, "email_change", "2025-01-01", 2)
+    db.flush()
+    recompute(db, user.id)
+    assert svc.deletion_detected and svc.status == "geloescht" and svc.status_auto
+
+    # Später wird das zweite Postfach hinzugefügt – dort läuft das Konto weiter → automatisch zurück auf offen
+    new = MailAccount(user_id=user.id, provider="imap", label="neu@x.test")
+    db.add(new)
+    db.flush()
+    _add(db, user, new, svc, "security", "2025-06-01", 3)
+    db.flush()
+    recompute(db, user.id)
+    assert not svc.deletion_detected and svc.status == "offen"
+
+    # Vom Nutzer gesetzt → bleibt
+    svc.status, svc.status_auto = "geloescht", False
+    recompute(db, user.id)
+    assert svc.status == "geloescht"
+
+
+def test_unconfirmed_only_when_nothing_but_a_verification_request():
+    from app.scanner import unconfirmed
+
+    m = {"count": 1, "best": 0.6, "first": "2024-01-01T00:00:00+00:00", "last": "2024-01-01T00:00:00+00:00"}
+    assert unconfirmed({"verification": m})
+    assert unconfirmed({"verification": m, "newsletter": m})
+    for other in ("welcome", "registration", "security", "order", "subscription", "account"):
+        assert not unconfirmed({"verification": m, other: m})
+    assert not unconfirmed({"welcome": m})

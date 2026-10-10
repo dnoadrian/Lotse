@@ -6,8 +6,8 @@ Stand: 10.10.2026. Alle Ergebnisse wurden tatsächlich ausgeführt; nichts davon
 
 | Bereich | Werkzeug | Ergebnis |
 |---|---|---|
-| Backend: Sicherheit, API, Erkennung, Mail-Ansicht, Favicons, JDM, SSRF | pytest (SQLite) | **204 bestanden** |
-| Dieselben Tests gegen PostgreSQL 16 | pytest mit `QUITLY_TEST_DATABASE_URL` | **204 bestanden** |
+| Backend: Sicherheit, API, Erkennung, Mail-Ansicht, Favicons, JDM, SSRF | pytest (SQLite) | **212 bestanden** |
+| Dieselben Tests gegen PostgreSQL 16 | pytest mit `QUITLY_TEST_DATABASE_URL` | **212 bestanden** |
 | davon IMAP-Integration gegen echten Dovecot-IMAPS-Server | pytest | **32 bestanden** |
 | Frontend: API-Client, Status-/Lösch-Logik, Zuordnungen | vitest | **41 bestanden** |
 | Frontend: Typprüfung | `tsc --noEmit` | fehlerfrei |

@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     # Jeder darf sich ein eigenes Konto anlegen (Daten sind strikt pro Konto getrennt)
     open_registration: bool = True
     registrations_per_ip_per_hour: int = 5
+    # Fehlgeschlagene Favicon-Abrufe mit Grund protokollieren (nur Domains, keine Nutzerdaten)
+    favicon_debug: bool = False
 
     @field_validator("public_url", mode="before")
     @classmethod
